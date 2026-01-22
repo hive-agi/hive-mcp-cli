@@ -49,9 +49,9 @@ func (s *CloneStep) Run() error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	// Clone with submodules (recursive)
-	cmd := exec.Command("git", "clone", "--recursive",
-		"https://github.com/BuddhiLW/hive-mcp.git",
+	// Clone repository (no submodules needed - deps fetched via git deps)
+	cmd := exec.Command("git", "clone",
+		"https://github.com/hive-agi/hive-mcp.git",
 		dir)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
