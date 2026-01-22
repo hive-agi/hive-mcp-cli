@@ -5,11 +5,21 @@ Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp) - a Clo
 ## Installation
 
 ```bash
-# CLI tool
+# 1. Install CLI tool
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive/main@latest
+mv ~/go/bin/main ~/go/bin/hive  # Rename binary
 
-# MCP server (for AI tool integration)
+# 2. Install MCP server
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive-setup-mcp@latest
+
+# 3. Register MCP server with Claude
+claude mcp add hive-setup --scope user -- hive-setup-mcp
+```
+
+Verify installation:
+```bash
+hive detect  # Check prerequisites
+claude mcp list | grep hive-setup  # Verify MCP registration
 ```
 
 ## Usage
