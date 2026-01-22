@@ -9,7 +9,7 @@ Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp) - a Clo
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive/main@latest
 
 # MCP server (for AI tool integration)
-go install github.com/hive-agi/hive-mcp-cli/cmd/hive-mcp@latest
+go install github.com/hive-agi/hive-mcp-cli/cmd/hive-setup-mcp@latest
 ```
 
 ## Usage
@@ -100,12 +100,12 @@ Use `--fix` to attempt automatic repairs.
 
 ## MCP Server
 
-The `hive-mcp` binary exposes the CLI commands as MCP tools, making them callable by AI assistants like Claude.
+The `hive-setup-mcp` binary exposes the CLI commands as MCP tools, making them callable by AI assistants like Claude.
 
 ### Registration with Claude CLI
 
 ```bash
-claude mcp add hive-mcp -- hive-mcp
+claude mcp add hive-setup -- hive-setup-mcp
 ```
 
 ### Available Tools
