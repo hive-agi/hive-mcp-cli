@@ -8,7 +8,7 @@ import (
 
 	"github.com/hive-agi/hive-mcp-cli/cmd/hive"
 	"github.com/mark3labs/mcp-go/server"
-	bmcp "github.com/rwxrob/bonzai/mcp"
+	bmcp "github.com/BuddhiLW/bonzai/mcp"
 )
 
 func main() {

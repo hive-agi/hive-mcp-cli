@@ -2,13 +2,11 @@ module github.com/hive-agi/hive-mcp-cli
 
 go 1.25.5
 
-replace github.com/rwxrob/bonzai => github.com/BuddhiLW/bonzai v0.57.0-mcp
-
 require (
+	github.com/BuddhiLW/bonzai v0.57.1-mcp
 	github.com/briandowns/spinner v1.23.0
 	github.com/fatih/color v1.16.0
 	github.com/mark3labs/mcp-go v0.43.2
-	github.com/rwxrob/bonzai v0.57.0
 )
 
 require (

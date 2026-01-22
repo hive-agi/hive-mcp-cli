@@ -8,7 +8,7 @@ import (
 	"github.com/hive-agi/hive-mcp-cli/internal/detect"
 	"github.com/hive-agi/hive-mcp-cli/internal/doctor"
 	"github.com/hive-agi/hive-mcp-cli/internal/setup"
-	"github.com/rwxrob/bonzai"
+	"github.com/BuddhiLW/bonzai"
 )
 
 // showHelp displays help information for a command
