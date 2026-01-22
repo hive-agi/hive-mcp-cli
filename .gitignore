@@ -1,3 +1,5 @@
-hive
-hive-mcp
-hive-setup-mcp
+# Binaries (in root only)
+/hive
+/hive-mcp
+/hive-setup-mcp
+/main

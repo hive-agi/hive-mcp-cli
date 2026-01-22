@@ -85,7 +85,7 @@ Usage:
 var Cmd = &bonzai.Cmd{
 	Name:  "hive",
 	Alias: "hive-mcp",
-	Vers:  "v0.1.0",
+	Vers:  "v0.2.2",
 	Short: "automated hive-mcp setup CLI",
 
 	// MCP metadata for AI tool discovery

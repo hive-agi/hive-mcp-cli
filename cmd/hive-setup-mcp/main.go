@@ -6,7 +6,7 @@ package main
 import (
 	"log"
 
-	"github.com/hive-agi/hive-mcp-cli/cmd/hive"
+	"github.com/hive-agi/hive-mcp-cli/internal/hive"
 	"github.com/mark3labs/mcp-go/server"
 	bmcp "github.com/BuddhiLW/bonzai/mcp"
 )
