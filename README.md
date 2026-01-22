@@ -5,7 +5,11 @@ Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp) - a Clo
 ## Installation
 
 ```bash
-go install github.com/hive-agi/hive-mcp-cli/cmd/hive@latest
+# CLI tool
+go install github.com/hive-agi/hive-mcp-cli/cmd/hive/main@latest
+
+# MCP server (for AI tool integration)
+go install github.com/hive-agi/hive-mcp-cli/cmd/hive-mcp@latest
 ```
 
 ## Usage
@@ -93,6 +97,30 @@ Health checks for your installation:
 - Integration tests
 
 Use `--fix` to attempt automatic repairs.
+
+## MCP Server
+
+The `hive-mcp` binary exposes the CLI commands as MCP tools, making them callable by AI assistants like Claude.
+
+### Registration with Claude CLI
+
+```bash
+claude mcp add hive-mcp -- hive-mcp
+```
+
+### Available Tools
+
+Commands with `McpMeta` are exposed as AI-callable tools:
+
+| Tool | Description |
+|------|-------------|
+| `hive_detect` | Detect installed components, prerequisites, and environment |
+| `hive_setup` | Install and configure hive-mcp components |
+| `hive_doctor` | Run health checks with optional `--fix` parameter |
+
+### How It Works
+
+The MCP server uses [Bonzai](https://github.com/rwxrob/bonzai) with MCP extensions to automatically generate tool schemas from command metadata. Only commands tagged with `Mcp: &bonzai.McpMeta{...}` are exposed.
 
 ## Environment Variables
 

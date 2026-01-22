@@ -11,24 +11,108 @@ import (
 	"github.com/rwxrob/bonzai"
 )
 
+// showHelp displays help information for a command
+func showHelp(cmd *bonzai.Cmd) error {
+	// Header
+	fmt.Printf("%s - %s\n", color.CyanString(cmd.Name), cmd.Short)
+	if cmd.Vers != "" {
+		fmt.Printf("Version: %s\n", cmd.Vers)
+	}
+	fmt.Println()
+
+	// Usage
+	if cmd.Usage != "" {
+		fmt.Printf("Usage: %s\n\n", cmd.Usage)
+	}
+
+	// Commands
+	if len(cmd.Cmds) > 0 {
+		fmt.Println("Commands:")
+		for _, c := range cmd.Cmds {
+			if c.Name != "" && !c.IsHidden() {
+				aliasStr := ""
+				if c.Alias != "" {
+					aliasStr = fmt.Sprintf(" (%s)", c.Alias)
+				}
+				fmt.Printf("  %s%s - %s\n", color.GreenString(c.Name), aliasStr, c.Short)
+			}
+		}
+		fmt.Println()
+	}
+
+	// Long description
+	if cmd.Long != "" {
+		fmt.Println(cmd.Long)
+	}
+
+	return nil
+}
+
+// helpCmd displays help for commands
+var helpCmd = &bonzai.Cmd{
+	Name:  "help",
+	Alias: "h|?|-h|--help",
+	Short: "display help information",
+	Long: `Display help for hive-mcp-cli commands.
+
+Usage:
+  hive help           # Show main help
+  hive help detect    # Show help for detect command
+  hive help setup     # Show help for setup command`,
+
+	Do: func(x *bonzai.Cmd, args ...string) error {
+		caller := x.Caller()
+
+		// If args provided, seek to that subcommand
+		if len(args) > 0 && caller != nil {
+			target, _, _ := caller.SeekInit(args...)
+			if target != nil && target != caller {
+				return showHelp(target)
+			}
+		}
+
+		// Show help for caller (parent command)
+		if caller != nil && caller != x {
+			return showHelp(caller)
+		}
+
+		// Fallback: show help for self
+		return showHelp(x)
+	},
+}
+
 // Cmd is the root command for hive-mcp-cli
 var Cmd = &bonzai.Cmd{
 	Name:  "hive",
 	Alias: "hive-mcp",
+	Vers:  "v0.1.0",
 	Short: "automated hive-mcp setup CLI",
+
+	// MCP metadata for AI tool discovery
+	Mcp: &bonzai.McpMeta{
+		Desc: "Automated setup and management CLI for hive-mcp swarm infrastructure. Provides detection, installation, and health checking capabilities.",
+	},
+
 	Long: `hive-mcp-cli automates the installation and verification of hive-mcp.
 
 Commands:
   detect  - Detect system prerequisites and installed components
   setup   - Install and configure hive-mcp components
   doctor  - Diagnose and fix common issues
+  help    - Display help information
 
 Examples:
   hive detect          # Check system prerequisites
   hive setup           # Run full setup
-  hive doctor          # Diagnose issues`,
+  hive doctor          # Diagnose issues
+  hive help detect     # Show help for detect command`,
 
-	Cmds: []*bonzai.Cmd{detectCmd, setupCmd, doctorCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd},
+
+	// Show help when called without arguments
+	Do: func(x *bonzai.Cmd, args ...string) error {
+		return showHelp(x)
+	},
 }
 
 // detectCmd checks system prerequisites
@@ -36,6 +120,12 @@ var detectCmd = &bonzai.Cmd{
 	Name:  "detect",
 	Alias: "d|check",
 	Short: "detect system prerequisites and components",
+
+	// MCP metadata for AI tool discovery
+	Mcp: &bonzai.McpMeta{
+		Desc: "Detect installed hive-mcp components, prerequisites, and environment configuration. Scans for Emacs, Java, Clojure, Babashka, Docker, Git, Claude CLI, and checks environment variables.",
+	},
+
 	Long: `Detect scans your system for:
   - Platform (Linux/macOS) and package manager
   - Shell configuration files
@@ -76,6 +166,12 @@ var setupCmd = &bonzai.Cmd{
 	Name:  "setup",
 	Alias: "s|install",
 	Short: "install and configure hive-mcp components",
+
+	// MCP metadata for AI tool discovery
+	Mcp: &bonzai.McpMeta{
+		Desc: "Install and configure hive-mcp components including cloning repos, installing prerequisites, downloading Clojure deps, setting up Emacs, and registering MCP server with Claude CLI.",
+	},
+
 	Long: `Setup performs the following steps:
   1. Clone repositories (hive-mcp, bb-mcp)
   2. Configure shell environment
@@ -137,6 +233,15 @@ var doctorCmd = &bonzai.Cmd{
 	Name:  "doctor",
 	Alias: "dr|diagnose",
 	Short: "diagnose and fix common issues",
+
+	// MCP metadata for AI tool discovery
+	Mcp: &bonzai.McpMeta{
+		Desc: "Run health checks on hive-mcp installation including version verification, service health, environment validation, and MCP registration status. Use --fix flag to attempt automatic fixes.",
+		Params: []bonzai.McpParam{
+			{Name: "fix", Desc: "Attempt automatic fixes for fixable issues", Type: "boolean"},
+		},
+	},
+
 	Long: `Doctor performs health checks:
   - Version verification (minimum requirements)
   - Service health (Chroma, Ollama endpoints)
