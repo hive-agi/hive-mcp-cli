@@ -1,0 +1,5 @@
+{:project-id "hive-mcp-cli"
+ :parent "hive-mcp"
+ :description "CLI tooling for hive-mcp"
+ :tags ["cli" "tooling"]
+ :license "MIT"}
