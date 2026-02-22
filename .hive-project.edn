@@ -1,5 +1,5 @@
 {:project-id "hive-mcp-cli"
- :parent "hive-mcp"
- :description "CLI tooling for hive-mcp"
- :tags ["cli" "tooling"]
- :license "MIT"}
+ :parent "hive"
+ :description "CLI interface for hive-mcp"
+ :language :clojure
+ :tags ["cli"]}
