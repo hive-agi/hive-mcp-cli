@@ -3,3 +3,8 @@
 /hive-mcp
 /hive-setup-mcp
 /main
+.clj-kondo/
+.lsp/
+.cpcache/
+target/
+.nrepl-port
