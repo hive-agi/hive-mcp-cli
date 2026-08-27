@@ -2,4 +2,5 @@
  :parent "hive"
  :description "CLI interface for hive-mcp"
  :language :clojure
- :tags ["cli"]}
+ :tags ["cli"] 
+ :carto {:source-roots ["dev" "src" "test"]}}
