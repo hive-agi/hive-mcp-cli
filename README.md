@@ -1,142 +1,137 @@
 # hive-mcp-cli
 
-Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp) - a Clojure-based MCP server that supercharges Claude Code with persistent memory, project management, and swarm coordination.
+Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp), the Clojure MCP
+host that gives Claude Code persistent memory, a knowledge graph, kanban and swarm
+coordination. It installs the **batteries-included FOSS stack**: the hive-mcp core plus the
+starter pack of open-source addons, wired into Claude Code through `bin/hive-mcp-foss`.
 
 ## Installation
 
 ```bash
-# 1. Install CLI and MCP server
+# 1. Install the CLI and its MCP server
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive@latest
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive-setup-mcp@latest
 
-# 2. Register MCP server with Claude
+# 2. Either drive it yourself...
+hive detect
+hive setup
+
+# ...or let Claude drive it
 claude mcp add hive-setup --scope user -- hive-setup-mcp
+claude   # ask: "help me set up hive-mcp"
 ```
 
-Verify installation:
+Verify:
+
 ```bash
-hive detect  # Check prerequisites
-claude mcp list | grep hive-setup  # Verify MCP registration
+hive doctor
+claude mcp list | grep hive   # hive: ~/hive-mcp/bin/hive-mcp-foss
 ```
 
 ## Usage
 
 ```bash
-# Check system prerequisites
-hive detect
-
-# Run full setup (interactive)
-hive setup
-
-# Diagnose issues
-hive doctor
-
-# Attempt automatic fixes
-hive doctor --fix
+hive detect            # check prerequisites and running services
+hive setup             # full setup, idempotent
+hive setup --emacs     # also sync Doom and start the Emacs daemon
+hive doctor            # health checks
+hive doctor --fix      # attempt automatic fixes
 ```
 
-## What it Does
+## What `hive setup` does
 
-The `hive setup` command automates the complete hive-mcp installation:
+1. **Clone** hive-mcp to `~/hive-mcp` (`HIVE_MCP_DIR` overrides)
+2. **Shell**: exports `HIVE_MCP_DIR` in your shell rc file
+3. **Prerequisites**: Java 21, Clojure CLI, Docker, Git (platform package manager)
+4. **Dependencies**: resolves the classpath the launcher boots, core plus `starter.deps.edn`
+5. **Chroma**: starts the vector store with docker compose and waits for its heartbeat
+6. **Ollama**: pulls the embedding model when Ollama is installed
+7. **Register**: `claude mcp add hive -- ~/hive-mcp/bin/hive-mcp-foss`
 
-1. **Clone** - Clones hive-mcp repository to `~/hive-mcp`
-2. **Shell** - Configures environment variables in your shell rc file
-3. **Prerequisites** - Installs platform-specific dependencies
-4. **Dependencies** - Downloads Clojure dependencies via `clojure -P`
-5. **Doom Sync** - Syncs Emacs packages (if using Doom Emacs)
-6. **Chroma** - Sets up Docker volume and starts ChromaDB for vector storage
-7. **Ollama** - Configures Ollama with embedding model
-8. **Emacs Daemon** - Starts Emacs in daemon mode
-9. **MCP Registration** - Registers hive-mcp server with Claude CLI
+With `--emacs`, Doom sync and the Emacs daemon run before registration. Without it the
+Emacs vessel stays dormant until a daemon appears, and lings run in tmux.
 
-## What hive-mcp Provides
+Every step is idempotent: a step whose `Check` already passes is skipped, and a failing
+step rolls back what it did.
 
-Once installed, hive-mcp adds 100+ MCP tools to Claude Code:
+## The starter pack
 
-- **Persistent Memory** - Project-scoped notes, decisions, and conventions stored in ChromaDB
-- **Kanban Board** - Task management with todo/doing/review/done states
-- **Git Integration** - Magit-powered git operations
-- **CIDER REPL** - Clojure evaluation via Emacs CIDER
-- **Swarm Coordination** - Spawn and coordinate multiple Claude agents
-- **Knowledge Graph** - Semantic relationships between memories
-- **Code Analysis** - clj-kondo linting and scc metrics
+`starter.deps.edn` in the hive-mcp repo is the FOSS addon set merged over the core at boot:
+
+| Role | Addon | Needs on the host | Status |
+|---|---|---|---|
+| Vessel, where lings run | hive-emacs | an Emacs daemon | shipped |
+| Knowledge graph store | hive-datahike | nothing, embedded | shipped |
+| Vessel, headless | hive-tmux | tmux, Python 3 with libtmux | pending |
+| Harness bridge | hive-claude | Claude Code | pending |
+| Code intelligence | lsp-mcp, clj-kondo-mcp, scc-mcp, basic-tools-mcp | clojure-lsp, clj-kondo, scc | pending |
+
+Pending rows are commented in `starter.deps.edn` until their releases carry the addon
+manifest the host discovers them by. A host tool that is missing degrades that one addon
+with a logged reason; the boot still completes. `HIVE_STARTER=0 bin/hive-mcp-foss` boots
+the bare core.
 
 ## Requirements
 
-| Tool | Minimum Version | Purpose |
-|------|-----------------|---------|
-| Go | 1.21+ | To install this CLI |
-| Emacs | 28.1+ | IDE integration and MCP server host |
-| Java | 17+ | Clojure runtime |
-| Clojure CLI | 1.11.0+ | Run hive-mcp server |
-| Babashka | 1.3.0+ | Fast Clojure scripting |
-| Docker | 20.0+ | Run ChromaDB |
-| Git | 2.0+ | Clone repositories |
-| Claude CLI | 0.1.0+ | MCP server registration |
+| Tool | Minimum | Purpose |
+|------|---------|---------|
+| Go | 1.21+ | install this CLI |
+| Java | 21 | Clojure runtime (CI and the container image run 21) |
+| Clojure CLI | 1.12+ | run the host from source |
+| Docker | 20.0+ | Chroma and the clojure-lsp sidecar |
+| Git | 2.0+ | clone the repo and git-sourced addons |
+| Claude Code | latest | MCP client |
 
 ### Optional
 
-- **Ollama** - Local LLM for agent delegation
-- **Doom Emacs** - Enhanced Emacs configuration (recommended)
+- **tmux** (with Python 3 + libtmux) for the headless vessel
+- **Emacs 28.1+** (Doom recommended) for the Emacs vessel and IDE integration
+- **Ollama** for local embeddings (semantic search over memory)
+- **clojure-lsp, clj-kondo, scc** for the code-intelligence addons
 
 ## Commands
 
 ### `hive detect`
 
-Scans your system and reports:
-- Platform and package manager
-- Shell configuration files
-- Installed tools and versions
-- Running services (Emacs daemon, Chroma, Ollama)
-- Environment variables
+Scans your system and reports platform and package manager, shell configuration files,
+installed tools and versions, running services (Emacs daemon, Chroma, Ollama) and
+environment variables.
 
 ### `hive setup`
 
-Runs the full installation sequence. Idempotent - safe to run multiple times. Skips steps that are already complete.
+Runs the installation sequence above. Idempotent: safe to run multiple times.
 
 ### `hive doctor`
 
-Health checks for your installation:
-- Version verification
-- Service health (Chroma, Ollama endpoints)
-- Environment validation
-- MCP registration status
-- Integration tests
-
-Use `--fix` to attempt automatic repairs.
+Health checks for your installation: version verification, service health (Chroma, Ollama),
+environment validation, MCP registration (the `hive` server pointing at `bin/hive-mcp-foss`),
+launcher present and executable, nREPL reachable on 7910. Use `--fix` to attempt repairs.
 
 ## MCP Server
 
-The `hive-setup-mcp` binary exposes the CLI commands as MCP tools, making them callable by AI assistants like Claude.
-
-### Registration with Claude CLI
+`hive-setup-mcp` exposes the CLI commands as MCP tools so an assistant can run the setup.
 
 ```bash
 claude mcp add hive-setup -- hive-setup-mcp
 ```
 
-### Available Tools
-
-Commands with `McpMeta` are exposed as AI-callable tools:
-
 | Tool | Description |
 |------|-------------|
 | `hive_detect` | Detect installed components, prerequisites, and environment |
-| `hive_setup` | Install and configure hive-mcp components |
-| `hive_doctor` | Run health checks with optional `--fix` parameter |
+| `hive_setup` | Install and configure hive-mcp; `emacs` parameter adds the Emacs steps |
+| `hive_doctor` | Run health checks with optional `fix` parameter |
 
-### How It Works
-
-The MCP server uses [Bonzai](https://github.com/rwxrob/bonzai) with MCP extensions to automatically generate tool schemas from command metadata. Only commands tagged with `Mcp: &bonzai.McpMeta{...}` are exposed.
+The server uses [Bonzai](https://github.com/rwxrob/bonzai) with MCP extensions to
+generate tool schemas from command metadata. Only commands tagged with
+`Mcp: &bonzai.McpMeta{...}` are exposed.
 
 ## Environment Variables
 
-After setup, these are configured in your shell:
+After setup, your shell exports:
 
 ```bash
 HIVE_MCP_DIR=~/hive-mcp
-BB_MCP_DIR=~/hive-mcp
-OPENROUTER_API_KEY=<your-key>  # Optional, for cloud LLM delegation
+OPENROUTER_API_KEY=<your-key>  # optional, for cloud LLM delegation
 ```
 
 ## License

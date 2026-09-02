@@ -22,7 +22,6 @@ type envVarSpec struct {
 
 var envVars = []envVarSpec{
 	{name: "HIVE_MCP_DIR", required: true, sensitive: false},
-	{name: "BB_MCP_DIR", required: true, sensitive: false},
 	{name: "OPENROUTER_API_KEY", required: false, sensitive: true},
 	{name: "HOME", required: true, sensitive: false},
 	{name: "SHELL", required: true, sensitive: false},

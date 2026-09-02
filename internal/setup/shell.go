@@ -29,7 +29,6 @@ func (s *ShellStep) envVars() map[string]string {
 	hiveMCP := s.hiveMCPDir()
 	return map[string]string{
 		"HIVE_MCP_DIR": hiveMCP,
-		"BB_MCP_DIR":   hiveMCP,
 	}
 }
 

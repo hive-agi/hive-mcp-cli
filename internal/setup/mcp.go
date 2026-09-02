@@ -4,16 +4,27 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
-// MCPStep registers the hive-mcp server with Claude CLI
+// MCPServerName is the name hive-mcp is registered under in Claude Code.
+const MCPServerName = "hive"
+
+// LauncherPath returns the FOSS launcher inside a hive-mcp checkout. The
+// launcher starts the services, merges starter.deps.edn and boots the host,
+// so registering it is the whole MCP wiring.
+func LauncherPath(hiveMCPDir string) string {
+	return filepath.Join(hiveMCPDir, "bin", "hive-mcp-foss")
+}
+
+// MCPStep registers the hive-mcp launcher with Claude Code.
 type MCPStep struct {
 	HiveMCPDir string
 }
 
 func (s *MCPStep) Name() string {
-	return "Register MCP server with Claude CLI"
+	return "Register hive-mcp with Claude Code"
 }
 
 func (s *MCPStep) hiveMCPDir() string {
@@ -24,31 +35,27 @@ func (s *MCPStep) hiveMCPDir() string {
 }
 
 func (s *MCPStep) Check() (bool, error) {
-	// Check if 'emacs' MCP server is already registered
 	cmd := exec.Command("claude", "mcp", "list")
 	output, err := cmd.Output()
 	if err != nil {
 		// Claude CLI might not be installed or configured
 		return false, nil
 	}
-
-	return strings.Contains(string(output), "emacs"), nil
+	return strings.Contains(string(output), "hive-mcp-foss"), nil
 }
 
 func (s *MCPStep) Run() error {
-	// First verify Claude CLI is available
 	if _, err := exec.LookPath("claude"); err != nil {
 		return fmt.Errorf("claude CLI not found - please install from https://github.com/anthropics/claude-code")
 	}
 
-	hiveMCP := s.hiveMCPDir()
+	launcher := LauncherPath(s.hiveMCPDir())
+	if _, err := os.Stat(launcher); err != nil {
+		return fmt.Errorf("launcher not found at %s (is the hive-mcp checkout complete?)", launcher)
+	}
 
-	// Register the MCP server
-	// claude mcp add emacs -- bb --prn -cp <hive-mcp>/bb.edn -m bb.hive-mcp.server/-main
-	cmd := exec.Command("claude", "mcp", "add", "emacs", "--",
-		"bb", "--prn",
-		"-cp", hiveMCP+"/bb.edn",
-		"-m", "bb.hive-mcp.server/-main")
+	// claude mcp add hive -- <hive-mcp>/bin/hive-mcp-foss
+	cmd := exec.Command("claude", "mcp", "add", MCPServerName, "--", launcher)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -60,7 +67,6 @@ func (s *MCPStep) Run() error {
 }
 
 func (s *MCPStep) Rollback() error {
-	// Remove the MCP registration
-	cmd := exec.Command("claude", "mcp", "remove", "emacs")
+	cmd := exec.Command("claude", "mcp", "remove", MCPServerName)
 	return cmd.Run()
 }

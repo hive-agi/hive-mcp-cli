@@ -2,12 +2,33 @@ package doctor
 
 import (
 	"encoding/json"
+	"fmt"
+	"net"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
-// CheckMCP verifies MCP server registration with Claude CLI
+const (
+	mcpServerName = "hive"
+	nreplAddr     = "127.0.0.1:7910"
+)
+
+func hiveMCPDir() string {
+	dir := getEnv("HIVE_MCP_DIR", "")
+	if dir == "" {
+		dir = filepath.Join(getEnv("HOME", ""), "hive-mcp")
+	}
+	return dir
+}
+
+func launcherPath() string {
+	return filepath.Join(hiveMCPDir(), "bin", "hive-mcp-foss")
+}
+
+// CheckMCP verifies MCP server registration with Claude Code
 func CheckMCP() []CheckResult {
 	return []CheckResult{
 		checkMCPRegistration(),
@@ -18,12 +39,11 @@ func CheckMCP() []CheckResult {
 func checkMCPRegistration() CheckResult {
 	result := CheckResult{
 		Name:    "MCP Server Registration",
-		FixHint: "Register with: claude mcp add emacs -- bb -x hive-mcp.core/main",
+		FixHint: fmt.Sprintf("Register with: claude mcp add %s -- %s", mcpServerName, launcherPath()),
 		CanFix:  true,
 		Fix:     registerMCPServer,
 	}
 
-	// Check if claude mcp list shows emacs
 	cmd := exec.Command("claude", "mcp", "list")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -34,13 +54,13 @@ func checkMCPRegistration() CheckResult {
 	}
 
 	output := string(out)
-	if strings.Contains(output, "emacs") {
+	if strings.Contains(output, "hive-mcp-foss") {
 		result.Status = StatusOK
-		result.Message = "emacs server registered"
+		result.Message = mcpServerName + " server registered (bin/hive-mcp-foss)"
 	} else {
 		result.Status = StatusError
-		result.Message = "emacs server not registered"
-		result.Details = "Run 'claude mcp add emacs -- bb -x hive-mcp.core/main' to register"
+		result.Message = mcpServerName + " server not registered"
+		result.Details = fmt.Sprintf("Run 'claude mcp add %s -- %s' to register", mcpServerName, launcherPath())
 	}
 
 	return result
@@ -49,20 +69,17 @@ func checkMCPRegistration() CheckResult {
 func checkMCPServerListed() CheckResult {
 	result := CheckResult{
 		Name:    "MCP Server Config",
-		FixHint: "Check ~/.config/claude-code/settings.json for MCP configuration",
+		FixHint: "Check ~/.claude.json for the MCP server entry",
 	}
 
-	// Try to parse claude mcp list output for detailed info
 	cmd := exec.Command("claude", "mcp", "list", "--json")
 	out, err := cmd.Output()
 	if err != nil {
-		// JSON output might not be available
 		result.Status = StatusWarning
 		result.Message = "could not verify server config"
 		return result
 	}
 
-	// Try to parse JSON
 	var servers interface{}
 	if err := json.Unmarshal(out, &servers); err != nil {
 		result.Status = StatusWarning
@@ -70,95 +87,71 @@ func checkMCPServerListed() CheckResult {
 		return result
 	}
 
-	// If we got here, JSON parsing worked
 	result.Status = StatusOK
 	result.Message = "server config accessible"
 	return result
 }
 
 func registerMCPServer() error {
-	hiveMCPDir := getEnv("HIVE_MCP_DIR", "")
-	if hiveMCPDir == "" {
-		hiveMCPDir = getEnv("HOME", "") + "/hive-mcp"
+	launcher := launcherPath()
+	if _, err := os.Stat(launcher); err != nil {
+		return fmt.Errorf("launcher not found at %s", launcher)
 	}
-
-	cmd := exec.Command("claude", "mcp", "add", "emacs",
-		"--",
-		"bb", "-x", "hive-mcp.core/main")
-	cmd.Dir = hiveMCPDir
+	cmd := exec.Command("claude", "mcp", "add", mcpServerName, "--", launcher)
 	return cmd.Run()
 }
 
-// CheckIntegration performs end-to-end integration tests
+// CheckIntegration performs end-to-end checks against a running host
 func CheckIntegration() []CheckResult {
 	return []CheckResult{
-		checkEmacsMCPConnection(),
-		checkMCPToolExecution(),
+		checkLauncher(),
+		checkNreplReachable(),
 	}
 }
 
-func checkEmacsMCPConnection() CheckResult {
+func checkLauncher() CheckResult {
 	result := CheckResult{
-		Name:    "Emacs MCP Connection",
-		FixHint: "Ensure Emacs daemon is running and hive-mcp.el is loaded",
+		Name:    "FOSS launcher",
+		FixHint: "Re-run 'hive setup' or 'git -C $HIVE_MCP_DIR pull' to restore bin/hive-mcp-foss",
 	}
 
-	// Try to execute emacs_status via MCP
-	// This requires the MCP server to be running and connected to Emacs
-	cmd := exec.Command("claude", "mcp", "run", "emacs", "emacs_status")
-
-	// Set a timeout
-	done := make(chan error)
-	go func() {
-		done <- cmd.Run()
-	}()
-
-	select {
-	case err := <-done:
-		if err != nil {
-			result.Status = StatusWarning
-			result.Message = "connection failed"
-			result.Details = "MCP server may not be running"
-			return result
-		}
-		result.Status = StatusOK
-		result.Message = "connected"
-	case <-time.After(5 * time.Second):
-		result.Status = StatusWarning
-		result.Message = "connection timeout"
-		result.Details = "MCP server did not respond within 5 seconds"
-	}
-
-	return result
-}
-
-func checkMCPToolExecution() CheckResult {
-	result := CheckResult{
-		Name:    "MCP Tool Execution",
-		FixHint: "Check MCP server logs for errors",
-	}
-
-	// Try a simple MCP tool call
-	cmd := exec.Command("claude", "mcp", "run", "emacs", "mcp_capabilities")
-	out, err := cmd.CombinedOutput()
-
+	info, err := os.Stat(launcherPath())
 	if err != nil {
-		result.Status = StatusWarning
-		result.Message = "tool execution failed"
-		result.Details = string(out)
+		result.Status = StatusError
+		result.Message = "bin/hive-mcp-foss missing"
+		result.Details = launcherPath()
+		return result
+	}
+	if info.Mode()&0111 == 0 {
+		result.Status = StatusError
+		result.Message = "bin/hive-mcp-foss is not executable"
+		result.Details = "chmod +x " + launcherPath()
 		return result
 	}
 
-	// Check if we got a valid response
-	output := string(out)
-	if strings.Contains(output, "capabilities") || strings.Contains(output, "hive-mcp") || len(output) > 10 {
-		result.Status = StatusOK
-		result.Message = "tools executing correctly"
-	} else {
-		result.Status = StatusWarning
-		result.Message = "unexpected tool response"
-		result.Details = "Response may be empty or malformed"
+	result.Status = StatusOK
+	result.Message = "present and executable"
+	return result
+}
+
+// checkNreplReachable probes the host's nREPL port, the same readiness
+// signal the launcher and the container healthcheck use.
+func checkNreplReachable() CheckResult {
+	result := CheckResult{
+		Name:    "hive-mcp nREPL",
+		FixHint: "Start the host with bin/hive-mcp-foss (or open Claude Code, which starts it on demand)",
 	}
 
+	conn, err := net.DialTimeout("tcp", nreplAddr, 2*time.Second)
+	if err != nil {
+		result.Status = StatusWarning
+		result.Message = "not listening on " + nreplAddr
+		result.Details = "the host is only up while an MCP client holds it open"
+		return result
+	}
+	conn.Close()
+
+	result.Status = StatusOK
+	result.Message = "listening on " + nreplAddr
 	return result
 }

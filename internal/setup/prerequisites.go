@@ -17,7 +17,9 @@ func (s *PrerequisitesStep) Name() string {
 
 func (s *PrerequisitesStep) Check() (bool, error) {
 	// Check for key binaries
-	required := []string{"git", "java", "clojure", "bb", "docker", "emacs"}
+	// Emacs, tmux and Babashka are optional: the starter pack degrades the
+	// matching addon when its host tool is absent.
+	required := []string{"git", "java", "clojure", "docker"}
 	for _, bin := range required {
 		if _, err := exec.LookPath(bin); err != nil {
 			return false, nil
@@ -44,8 +46,7 @@ func (s *PrerequisitesStep) installDarwin() error {
 	}
 
 	packages := []string{
-		"git", "openjdk@17", "clojure/tools/clojure", "borkdude/brew/babashka",
-		"docker", "emacs-plus@29",
+		"git", "openjdk@21", "clojure/tools/clojure", "docker",
 	}
 
 	for _, pkg := range packages {
@@ -66,7 +67,7 @@ func (s *PrerequisitesStep) installLinux() error {
 	}
 
 	// Install basic packages via apt
-	aptPkgs := []string{"git", "openjdk-17-jdk", "docker.io", "emacs"}
+	aptPkgs := []string{"git", "openjdk-21-jdk", "docker.io"}
 	cmd := exec.Command("sudo", append([]string{"apt", "install", "-y"}, aptPkgs...)...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -75,16 +76,7 @@ func (s *PrerequisitesStep) installLinux() error {
 	}
 
 	// Install Clojure
-	if err := s.installClojureLinux(); err != nil {
-		return err
-	}
-
-	// Install Babashka
-	if err := s.installBabashkaLinux(); err != nil {
-		return err
-	}
-
-	return nil
+	return s.installClojureLinux()
 }
 
 func (s *PrerequisitesStep) installClojureLinux() error {
@@ -101,19 +93,6 @@ sudo ./linux-install.sh
 rm linux-install.sh
 `
 	cmd := exec.Command("bash", "-c", script)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func (s *PrerequisitesStep) installBabashkaLinux() error {
-	// Check if already installed
-	if _, err := exec.LookPath("bb"); err == nil {
-		return nil
-	}
-
-	// Install via official script
-	cmd := exec.Command("bash", "-c", "curl -sLO https://raw.githubusercontent.com/babashka/babashka/master/install && chmod +x install && sudo ./install && rm install")
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()

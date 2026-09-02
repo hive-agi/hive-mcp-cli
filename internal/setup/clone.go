@@ -79,7 +79,7 @@ type CloneDepsStep struct {
 }
 
 func (s *CloneDepsStep) Name() string {
-	return "Download Clojure dependencies"
+	return "Download Clojure dependencies (core + starter pack)"
 }
 
 func (s *CloneDepsStep) targetDir() string {
@@ -98,8 +98,13 @@ func (s *CloneDepsStep) Check() (bool, error) {
 func (s *CloneDepsStep) Run() error {
 	dir := s.targetDir()
 
-	// Run clojure -P to download dependencies
-	cmd := exec.Command("clojure", "-P")
+	// Resolve the same classpath the launcher boots: the :dev/:nrepl aliases
+	// plus starter.deps.edn merged through -Sdeps when the checkout has one.
+	args := []string{"-P", "-M:dev:nrepl"}
+	if content, err := os.ReadFile(filepath.Join(dir, "starter.deps.edn")); err == nil {
+		args = append([]string{"-Sdeps", string(content)}, args...)
+	}
+	cmd := exec.Command("clojure", args...)
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr

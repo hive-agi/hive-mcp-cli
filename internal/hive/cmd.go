@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"runtime"
 
+	"github.com/BuddhiLW/bonzai"
 	"github.com/fatih/color"
 	"github.com/hive-agi/hive-mcp-cli/internal/detect"
 	"github.com/hive-agi/hive-mcp-cli/internal/doctor"
 	"github.com/hive-agi/hive-mcp-cli/internal/setup"
-	"github.com/BuddhiLW/bonzai"
 )
 
 // showHelp displays help information for a command
@@ -85,7 +85,7 @@ Usage:
 var Cmd = &bonzai.Cmd{
 	Name:  "hive",
 	Alias: "hive-mcp",
-	Vers:  "v0.2.2",
+	Vers:  "v0.3.0",
 	Short: "automated hive-mcp setup CLI",
 
 	// MCP metadata for AI tool discovery
@@ -123,15 +123,16 @@ var detectCmd = &bonzai.Cmd{
 
 	// MCP metadata for AI tool discovery
 	Mcp: &bonzai.McpMeta{
-		Desc: "Detect installed hive-mcp components, prerequisites, and environment configuration. Scans for Emacs, Java, Clojure, Babashka, Docker, Git, Claude CLI, and checks environment variables.",
+		Desc: "Detect installed hive-mcp components, prerequisites, and environment configuration. Scans for Java, Clojure, Docker, Git, Claude CLI, the optional Emacs/tmux/Babashka hosts, and checks environment variables.",
 	},
 
 	Long: `Detect scans your system for:
   - Platform (Linux/macOS) and package manager
   - Shell configuration files
-  - Required tools: Emacs, Java, Clojure, Babashka, Docker, Git, Claude CLI
+  - Required tools: Java 21, Clojure CLI, Docker, Git, Claude CLI
+  - Optional hosts the starter pack degrades without: Emacs, tmux, Babashka
   - Running services: Emacs daemon, Chroma, Ollama
-  - Environment variables: HIVE_MCP_DIR, BB_MCP_DIR, OPENROUTER_API_KEY`,
+  - Environment variables: HIVE_MCP_DIR, OPENROUTER_API_KEY`,
 
 	Do: func(x *bonzai.Cmd, args ...string) error {
 		fmt.Println("Detecting system configuration...")
@@ -169,19 +170,24 @@ var setupCmd = &bonzai.Cmd{
 
 	// MCP metadata for AI tool discovery
 	Mcp: &bonzai.McpMeta{
-		Desc: "Install and configure hive-mcp components including cloning repos, installing prerequisites, downloading Clojure deps, setting up Emacs, and registering MCP server with Claude CLI.",
+		Desc: "Install and configure the batteries-included hive-mcp stack: clone the repo, install prerequisites, resolve the core + starter-pack classpath, start Chroma, configure Ollama, and register bin/hive-mcp-foss with Claude Code. Pass --emacs to also sync Doom and start the Emacs daemon.",
+		Params: []bonzai.McpParam{
+			{Name: "emacs", Desc: "Also sync Doom Emacs packages and start the Emacs daemon", Type: "boolean"},
+		},
 	},
 
 	Long: `Setup performs the following steps:
-  1. Clone repositories (hive-mcp, bb-mcp)
-  2. Configure shell environment
+  1. Clone hive-mcp
+  2. Configure shell environment (HIVE_MCP_DIR)
   3. Install prerequisites (platform-specific)
-  4. Download Clojure dependencies
-  5. Sync Emacs packages
-  6. Setup Docker volumes and Chroma
-  7. Configure Ollama with embedding model
-  8. Start Emacs daemon
-  9. Register MCP server with Claude CLI`,
+  4. Download Clojure dependencies: core plus starter.deps.edn
+  5. Setup Docker volumes and Chroma
+  6. Configure Ollama with embedding model
+  7. Register bin/hive-mcp-foss with Claude Code as the "hive" MCP server
+
+With --emacs, two more steps run before registration: sync Emacs packages
+and start the Emacs daemon. Without it the Emacs vessel simply stays
+dormant until a daemon appears; lings run in tmux.`,
 
 	Do: func(x *bonzai.Cmd, args ...string) error {
 		fmt.Println("🐝 hive-mcp setup")
@@ -190,18 +196,26 @@ var setupCmd = &bonzai.Cmd{
 		// Determine platform
 		platform := runtime.GOOS
 
+		withEmacs := false
+		for _, arg := range args {
+			if arg == "--emacs" || arg == "-e" {
+				withEmacs = true
+			}
+		}
+
 		// Build step list
 		steps := []setup.Step{
 			&setup.CloneStep{},
 			&setup.ShellStep{},
 			&setup.PrerequisitesStep{Platform: platform},
 			&setup.CloneDepsStep{},
-			&setup.DoomSyncStep{},
 			&setup.ChromaStep{},
 			&setup.OllamaStep{},
-			&setup.EmacsDaemonStep{},
-			&setup.MCPStep{},
 		}
+		if withEmacs {
+			steps = append(steps, &setup.DoomSyncStep{}, &setup.EmacsDaemonStep{})
+		}
+		steps = append(steps, &setup.MCPStep{})
 
 		// Create runner with progress output
 		runner := setup.NewRunner(steps)
@@ -220,8 +234,8 @@ var setupCmd = &bonzai.Cmd{
 		fmt.Println()
 		fmt.Println("Next steps:")
 		fmt.Println("  1. Restart your shell or run: source ~/.bashrc")
-		fmt.Println("  2. Verify with: hive doctor")
-		fmt.Println("  3. Start using: claude")
+		fmt.Println("  2. Verify with: hive doctor  (and: claude mcp list)")
+		fmt.Println("  3. Start using: claude   (the first call boots bin/hive-mcp-foss)")
 		fmt.Println()
 
 		return nil
@@ -246,8 +260,8 @@ var doctorCmd = &bonzai.Cmd{
   - Version verification (minimum requirements)
   - Service health (Chroma, Ollama endpoints)
   - Environment variable validation
-  - MCP registration status
-  - Integration test (Emacs MCP connection)
+  - MCP registration status (the "hive" server pointing at bin/hive-mcp-foss)
+  - Launcher present and executable, nREPL reachable on 7910
   - Optional observability stack check
 
 Use --fix to attempt automatic fixes for fixable issues.`,

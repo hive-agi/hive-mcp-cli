@@ -223,7 +223,6 @@ func CheckEnvVars() []CheckResult {
 		fixHint  string
 	}{
 		{"HIVE_MCP_DIR", true, "Add to shell config: export HIVE_MCP_DIR=$HOME/hive-mcp"},
-		{"BB_MCP_DIR", true, "Add to shell config: export BB_MCP_DIR=$HOME/bb-mcp"},
 		{"OPENROUTER_API_KEY", false, "Get API key from https://openrouter.ai and add to shell config"},
 	}
 
