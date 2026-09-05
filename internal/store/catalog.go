@@ -26,9 +26,10 @@ import (
 // DefaultBaseURL is the public storefront. HIVE_STORE_URL overrides it, which
 // is what a self-hosted store or a local dev server needs.
 //
-// The apex is NOT it. hive-mcp.com answers 404 for every path, /healthz
-// included, so pointing here made every catalog command fail for anyone who
-// had not set the environment variable, which is everyone on their first run.
+// The apex is NOT it. hive-mcp.com serves the marketing site and install.sh
+// and nothing else: /healthz and every /api path answer 404. Pointing here
+// made every catalog command fail for anyone who had not set the environment
+// variable, which is everyone on their first run.
 const DefaultBaseURL = "https://store.hive-mcp.com"
 
 // BaseURL is the store this CLI talks to.

@@ -40,7 +40,7 @@ var addonCmd = &bonzai.Cmd{
   hive addon status             what this project would mount, and why not
 
 Environment:
-  HIVE_STORE_URL     the store to talk to (default https://hive-mcp.com)
+  HIVE_STORE_URL     the store to talk to (default https://store.hive-mcp.com)
   HIVE_STORE_TOKEN   your store token; search works without it
 
 Registering your own addon needs no account and no upload. The mounter scans
