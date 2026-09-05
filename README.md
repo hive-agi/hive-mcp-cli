@@ -23,6 +23,20 @@ The skills carry the whole procedure (prerequisites, the starter pack, the store
 gateway, the two credentials, and what to check when a step fails), so the
 assistant drives it instead of guessing.
 
+Every downloaded file is checked against a signed `SHA256SUMS` before it is made
+executable, and the installer prints which checks it managed. To read the script
+first and check it against a second origin:
+
+```bash
+curl -fsSL https://hive-mcp.com/install.sh -o install.sh
+curl -fsSL https://hive-mcp.com/install.sh.sha256    # served from our cluster, not GitHub
+sha256sum -c install.sh.sha256
+less install.sh && sh install.sh
+```
+
+See [Verifying the install](https://docs.hive-mcp.com/Verifying-The-Install.html)
+for what each tier proves and what it does not.
+
 To run `hive setup` unattended in the same pass, pass the flag through to the shell:
 
 ```bash

@@ -7,6 +7,10 @@ on:
 
 permissions:
   contents: write
+  # attest-build-provenance mints a Sigstore certificate from the workflow's
+  # OIDC identity and records the attestation; both need their own grant.
+  id-token: write
+  attestations: write
 
 jobs:
   release:
@@ -76,6 +80,77 @@ jobs:
             done
           done
           ls -l dist
+
+      # The installer ships as a release asset too, so hive-mcp.com can redirect
+      # at a RELEASE rather than at a branch: a push to main then changes nobody's
+      # one-liner, only a deliberate release does. Being in dist/ also puts its
+      # own sha256 inside the signed manifest.
+      - name: Stage the installer
+        run: cp install.sh dist/install.sh
+
+      # The checksum manifest install.sh verifies every download against.
+      - name: Checksum the binaries
+        working-directory: dist
+        run: |
+          sha256sum hive-* install.sh > SHA256SUMS
+          cat SHA256SUMS
+
+      # The pinned key and the signing key must be the same key. Without this
+      # gate, rotating one and not the other ships releases that every existing
+      # installer refuses, and the failure surfaces on users' machines rather
+      # than here. Presence of the secret is read as a STATUS; the value is
+      # never interpolated anywhere it could be printed.
+      - name: Check the signing key against the one install.sh pins
+        id: signing
+        env:
+          HIVE_SIGNING_SECRET: ${{ secrets.HIVE_SIGNING_KEY }}
+        run: |
+          pinned=$(sed -n 's/^HIVE_SIGNING_KEY="\(.*\)"$/\1/p' install.sh | head -1)
+          if [ -n "${HIVE_SIGNING_SECRET:-}" ]; then have_secret=yes; else have_secret=no; fi
+
+          if [ -z "$pinned" ] && [ "$have_secret" = no ]; then
+            echo "::warning::No signing key yet. This release will be UNSIGNED and install.sh will report tier 2 unavailable. Run bin/gen-signing-key to fix."
+            echo "sign=no" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if [ -n "$pinned" ] && [ "$have_secret" = no ]; then
+            echo "::error::install.sh pins a signing key but the HIVE_SIGNING_KEY secret is not set. Every installer in the field would refuse this release."
+            exit 1
+          fi
+          if [ -z "$pinned" ] && [ "$have_secret" = yes ]; then
+            echo "::error::A signing key is configured but install.sh pins none, so nothing would check the signature. Paste the public key into install.sh."
+            exit 1
+          fi
+
+          printf '%s' "$HIVE_SIGNING_SECRET" | base64 -d > /tmp/signing.pem
+          derived=$(openssl pkey -in /tmp/signing.pem -pubout -outform DER | base64 -w0)
+          if [ "$derived" != "$pinned" ]; then
+            echo "::error::The HIVE_SIGNING_KEY secret does not match the public key pinned in install.sh."
+            exit 1
+          fi
+          echo "sign=yes" >> "$GITHUB_OUTPUT"
+
+      - name: Sign SHA256SUMS
+        if: steps.signing.outputs.sign == 'yes'
+        working-directory: dist
+        run: |
+          openssl pkeyutl -sign -inkey /tmp/signing.pem -rawin \
+            -in SHA256SUMS -out SHA256SUMS.sig
+          openssl pkeyutl -verify -pubin \
+            -inkey <(openssl pkey -in /tmp/signing.pem -pubout) \
+            -rawin -in SHA256SUMS -sigfile SHA256SUMS.sig
+        shell: bash
+
+      - name: Shred the key material
+        if: always()
+        run: rm -f /tmp/signing.pem
+
+      # Names the workflow, repo and commit that produced each binary. This is
+      # the tier a stolen signing key does not survive, because the attestation
+      # is bound to a GitHub OIDC identity rather than to a key we hold.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: 'dist/hive-*'
 
       - name: Create GitHub release
         if: steps.check_release.outputs.exists == 'false'

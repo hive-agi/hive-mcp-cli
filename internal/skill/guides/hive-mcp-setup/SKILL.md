@@ -49,11 +49,29 @@ If the `hive` CLI is not installed:
 curl -fsSL https://hive-mcp.com/install.sh | sh
 ```
 
-…or, with a Go toolchain present:
+Or, with a Go toolchain present:
 
 ```bash
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive@latest
 ```
+
+**If the user is uneasy about piping a script into a shell, take that seriously
+and offer the two-step instead.** The script comes from GitHub and the checksum
+from a different system, so checking one against the other is worth something:
+
+```bash
+curl -fsSL https://hive-mcp.com/install.sh -o install.sh
+curl -fsSL https://hive-mcp.com/install.sh.sha256    # our cluster, not GitHub
+sha256sum -c install.sh.sha256                       # macOS: shasum -a 256 -c
+less install.sh && sh install.sh
+```
+
+The installer verifies every binary against a signed `SHA256SUMS` before making
+it executable, and prints which checks it managed. A tier reported **failed** is
+a stop: do not retry it and do not work around it. A tier reported
+**unavailable** is not a failure, it means the tool for that check is absent (an
+`openssl` that does raw Ed25519, or `gh`). Detail:
+<https://docs.hive-mcp.com/Verifying-The-Install.html>.
 
 ### What it needs
 

@@ -1,0 +1,64 @@
+#!/bin/sh
+# One-time ceremony: mint the Ed25519 key that signs SHA256SUMS.
+#
+#   bin/gen-signing-key
+#
+# The private half never crosses this terminal. It is written to a 0600 file and
+# piped straight into `pass` and `gh secret set`, so it appears in no transcript,
+# no scrollback and no shell history. Only the PUBLIC half is printed, which is
+# the half you paste into install.sh.
+#
+# Rotating: mint a new key, update install.sh AND the secret in the same change.
+# The release workflow refuses to publish when the two disagree, so a half-done
+# rotation fails in CI rather than on somebody's machine.
+set -eu
+
+REPO="hive-agi/hive-mcp-cli"
+PASS_PATH="hive/release/signing-key"
+KEY="${1:-./hive-signing-key.pem}"
+
+die() { printf 'error: %s\n' "$*" >&2; exit 1; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+have openssl || die "openssl is required"
+[ -e "$KEY" ] && die "$KEY already exists. Refusing to overwrite a signing key.
+    To rotate deliberately, move the old one aside first."
+
+umask 077
+openssl genpkey -algorithm ed25519 -out "$KEY"
+chmod 600 "$KEY"
+
+PUB="$(openssl pkey -in "$KEY" -pubout -outform DER | base64 -w0)"
+
+cat <<EOF
+
+Key written to $KEY (0600). Its private half has not been printed.
+
+1. Paste this into install.sh, replacing the empty HIVE_SIGNING_KEY:
+
+HIVE_SIGNING_KEY="$PUB"
+
+2. Publish the same value as a second origin, so a reader can cross-check the
+   pinned copy against something that is not GitHub. In k8s-agi:
+
+     contexts/home-lab/hive-landing/site/hive-signing-key.pub
+
+3. Store the private half. Neither command prints it:
+
+     pass insert -m $PASS_PATH < $KEY
+     base64 -w0 < $KEY | gh secret set HIVE_SIGNING_KEY --repo $REPO
+
+4. Then remove the local copy. \`pass\` and the GitHub secret are the two homes;
+   a third copy on a laptop is the one that leaks:
+
+     shred -u $KEY
+
+Prove the round trip before deleting anything:
+
+     printf 'test' > /tmp/m
+     openssl pkeyutl -sign -inkey $KEY -rawin -in /tmp/m -out /tmp/s
+     printf '%s' "$PUB" | base64 -d > /tmp/pub.der
+     openssl pkeyutl -verify -pubin -inkey /tmp/pub.der -keyform DER \\
+       -rawin -in /tmp/m -sigfile /tmp/s
+
+EOF
