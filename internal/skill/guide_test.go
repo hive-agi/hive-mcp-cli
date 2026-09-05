@@ -68,7 +68,7 @@ func TestGuideSummaryIsOneSentence(t *testing.T) {
 }
 
 // A guide installs like any other skill, and a second install of unchanged
-// content is a no-op — the installer runs on every setup.
+// content is a no-op: the installer runs on every setup.
 func TestGuidesInstallIdempotently(t *testing.T) {
 	root := t.TempDir()
 	guides, err := Guides()

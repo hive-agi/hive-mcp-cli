@@ -7,7 +7,7 @@
 // in a store response describes how to install a JVM host, so these are prose,
 // and they are embedded rather than fetched so `hive guide --install` works on a
 // machine that has no network, no token and no hive-mcp yet. That is the whole
-// point of them — they are what a first run leaves behind for Claude to read.
+// point of them: they are what a first run leaves behind for Claude to read.
 package skill
 
 import (
@@ -79,8 +79,8 @@ func readGuide(name string) (Skill, error) {
 }
 
 // frontmatterField reads one scalar key out of the leading YAML block. It
-// handles exactly the shape these files are written in — `key: value` on one
-// line — and returns "" for anything else rather than pulling in a parser.
+// handles exactly the shape these files are written in (`key: value` on one
+// line), and returns "" for anything else rather than pulling in a parser.
 func frontmatterField(body, key string) string {
 	if !strings.HasPrefix(body, "---\n") {
 		return ""

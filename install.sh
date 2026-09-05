@@ -96,7 +96,7 @@ detect_platform() {
 # --- fetching --------------------------------------------------------------
 
 fetch() {
-  # fetch URL DEST — quiet, fails on a 4xx/5xx rather than saving the error page.
+  # fetch URL DEST. Quiet, and fails on a 4xx/5xx rather than saving the error page.
   if have curl; then
     curl -fsSL "$1" -o "$2"
   elif have wget; then
@@ -140,7 +140,7 @@ install_with_go() {
 # --- run -------------------------------------------------------------------
 
 say ""
-say "${B}hive-mcp${R} — persistent memory, a knowledge graph and a swarm for Claude Code"
+say "${B}hive-mcp${R}: persistent memory, a knowledge graph and a swarm for Claude Code"
 say ""
 
 detect_platform
@@ -176,7 +176,7 @@ if have claude; then
     warn "could not register hive-setup; run: claude mcp add hive-setup --scope user -- $BIN_DIR/hive-setup-mcp"
   fi
 else
-  warn "Claude Code not found on PATH — install it from https://claude.ai/download"
+  warn "Claude Code not found on PATH. Install it from https://claude.ai/download"
 fi
 
 case ":$PATH:" in

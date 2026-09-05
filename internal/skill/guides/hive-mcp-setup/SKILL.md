@@ -1,6 +1,6 @@
 ---
 name: hive-mcp-setup
-description: Set up the hive-mcp harness on this machine, end to end — the batteries-included FOSS build, or a licensed build for someone who already has a store token. Use when the user says "help me set up hive-mcp", "set up the hive harness locally", "I have a key / a token / a subscription", "install the FOSS build", "set up hive-mcp with my subscription", or when `hive doctor` reports a broken install and they want it repaired. Also covers verifying the install, registering it with Claude Code, and the catchup/wrap rituals a first session needs.
+description: Set up the hive-mcp harness on this machine, end to end: the batteries-included FOSS build, or a licensed build for someone who already has a store token. Use when the user says "help me set up hive-mcp", "set up the hive harness locally", "I have a key / a token / a subscription", "install the FOSS build", "set up hive-mcp with my subscription", or when `hive doctor` reports a broken install and they want it repaired. Also covers verifying the install, registering it with Claude Code, and the catchup/wrap rituals a first session needs.
 ---
 
 # Setting up hive-mcp
@@ -13,7 +13,7 @@ Code over MCP. Setting it up means four things, in this order:
 3. registration with Claude Code,
 4. proof that all three worked.
 
-There are two builds. **Ask which one before touching anything** — the addon step
+There are two builds. **Ask which one before touching anything**, because the addon step
 differs completely, and everything else is shared.
 
 | | FOSS build | Licensed build |
@@ -22,14 +22,14 @@ differs completely, and everything else is shared.
 | Credential | none | an artifact token, `hv_live_…` |
 | Gets you | memory, KG, kanban, swarm, session rituals, code intelligence | the above plus carto, hive-shape, hive-dsl, hive-test, hive-schemas … |
 
-If the user said "I have a key", they mean the licensed build — go to
+If the user said "I have a key", they mean the licensed build, so go to
 [Licensed build](#licensed-build), but do part 1 first: **the token adds addons to a
 host that must already exist.** A subscriber with no hive-mcp on disk has nothing for
 the token to feed.
 
 ---
 
-## Part 1 — the host (both builds)
+## Part 1: the host (both builds)
 
 ### The fast path
 
@@ -83,7 +83,7 @@ claude mcp add hive -- "$HOME/hive-mcp/bin/hive-mcp-foss"
 ```
 
 `bin/hive-mcp-foss` merges [`starter.deps.edn`](https://github.com/hive-agi/hive-mcp/blob/main/starter.deps.edn)
-over `deps.edn` at boot — that file **is** the FOSS addon set. `HIVE_STARTER=0` boots
+over `deps.edn` at boot, and that file **is** the FOSS addon set. `HIVE_STARTER=0` boots
 the bare core instead, which is a diagnostic, not a normal setup.
 
 A personal overlay goes in a gitignored `local.deps.edn` beside it; the launcher
@@ -91,7 +91,7 @@ merges that too. That is also where a licensed build's coordinates land.
 
 ---
 
-## Part 2a — FOSS build
+## Part 2a: FOSS build
 
 Nothing further. `starter.deps.edn` is already merged by the launcher, every
 coordinate in it is on Clojars, and no registry, VPN or credential is involved.
@@ -102,7 +102,7 @@ check `hive doctor` for the verdict.
 
 ---
 
-## Part 2b — licensed build {#licensed-build}
+## Part 2b: licensed build {#licensed-build}
 
 There are **two different credentials** here and confusing them is the most common
 failure:
@@ -110,7 +110,7 @@ failure:
 | Credential | Where it comes from | Where it goes | What it opens |
 |---|---|---|---|
 | **Artifact token** `hv_live_…` | minted in the store dashboard, shown once | `~/.m2/settings.xml` | the Maven gateway, `store.hive-mcp.com/maven` |
-| **Store session token** (OIDC) | signing in at `auth.hive-mcp.com` | `HIVE_STORE_TOKEN` | the store API — `/api/me`, entitlements, `hive addon --owned` |
+| **Store session token** (OIDC) | signing in at `auth.hive-mcp.com` | `HIVE_STORE_TOKEN` | the store API: `/api/me`, entitlements, `hive addon --owned` |
 
 The artifact token is the one that makes builds resolve. When the user says "I have a
 key", ask which of the two they hold; if they minted it in the dashboard, it is the
@@ -118,7 +118,7 @@ artifact token.
 
 ### 1. Point the project at the gateway
 
-In the project's `deps.edn` — **not** in `~/.clojure/deps.edn`:
+In the project's `deps.edn`, **not** in `~/.clojure/deps.edn`:
 
 ```clojure
 {:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/maven"}}
@@ -131,7 +131,7 @@ request.
 
 `hive addon show <id>` prints the coordinate for any addon; `hive addon search`
 finds one by description. `https://store.hive-mcp.com/api/versions` answers what the
-whole shelf resolves to, publicly and with no token — that is what a build asks
+whole shelf resolves to, publicly and with no token. That is what a build asks
 before it bumps a pin.
 
 ### 2. Give Maven the credential
@@ -163,7 +163,7 @@ clj -Sforce -Sdeps '{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/
 
 ### 4. Load them into the host
 
-Licensed addons mount the same way FOSS ones do — put their coordinates in
+Licensed addons mount the same way FOSS ones do: put their coordinates in
 `~/hive-mcp/local.deps.edn` (gitignored, merged by the launcher) and restart the
 host. `hive addon status` reports what actually mounted.
 
@@ -183,7 +183,7 @@ to wait out.
 
 ---
 
-## Part 3 — register with Claude Code
+## Part 3: register with Claude Code
 
 ```bash
 claude mcp add hive -- "$HOME/hive-mcp/bin/hive-mcp-foss"
@@ -194,7 +194,7 @@ project rather than the current one.
 
 ---
 
-## Part 4 — prove it
+## Part 4: prove it
 
 ```bash
 hive doctor                      # versions, services, env, registration, nREPL on 7910
@@ -203,7 +203,7 @@ claude mcp list | grep hive      # hive: …/bin/hive-mcp-foss
 
 `hive doctor --fix` attempts repairs for the fixable checks.
 
-Then, inside Claude Code in a real project, the two rituals — plain requests, not
+Then, inside Claude Code in a real project, the two rituals, which are plain requests, not
 slash commands; the model reaches for the tools itself:
 
 ```
@@ -226,12 +226,12 @@ Work outward from the process:
 
 | Symptom | Look at |
 |---|---|
-| `claude mcp list` has no `hive` | registration — re-run `hive setup`, or `claude mcp add` by hand |
+| `claude mcp list` has no `hive` | registration; re-run `hive setup`, or `claude mcp add` by hand |
 | registered but tools missing | the host did not boot: run `bin/hive-mcp-foss` in a terminal and read the log |
-| host boots, one addon absent | its host tool is missing — the log names the reason; `hive addon status` confirms |
+| host boots, one addon absent | its host tool is missing; the log names the reason; `hive addon status` confirms |
 | memory works, semantic search does not | Ollama or the embedding model: `ollama pull nomic-embed-text` |
 | licensed addon will not resolve | the three causes above, in that order |
-| everything green, nothing remembered | no wrap has ever run — see Part 4 |
+| everything green, nothing remembered | no wrap has ever run; see Part 4 |
 
 Full reference, always current: <https://github.com/hive-agi/hive-mcp/wiki>.
 The store's own setup recipe, with the user's real coordinates substituted in:

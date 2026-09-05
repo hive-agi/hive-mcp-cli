@@ -1,13 +1,14 @@
 ---
 name: hive-store
-description: Use the hive store — browse the addon catalog, understand what an addon does and what it depends on, subscribe, mint an artifact token, and make a licensed coordinate resolve. Use when the user asks what hive addons exist, what a subscription includes, how to buy or pay for one, how to mint or revoke a token, why a licensed artifact will not resolve, or what version an addon is on. Covers the public API endpoints an agent or a build can read without any credential.
+description: Use the hive store: browse the addon catalog, understand what an addon does and what it depends on, subscribe, mint an artifact token, and make a licensed coordinate resolve. Use when the user asks what hive addons exist, what a subscription includes, how to buy or pay for one, how to mint or revoke a token, why a licensed artifact will not resolve, or what version an addon is on. Covers the public API endpoints an agent or a build can read without any credential.
 ---
 
 # The hive store
 
 `store.hive-mcp.com` is the storefront: catalog, subscriptions, tokens, and the Maven
-gateway that checks them. Two things live behind it — what is **for sale** (the
-catalog) and what **exists** (the versions shelf) — and they are different questions.
+gateway that checks them. Two things live behind it, what is **for sale** (the
+catalog) and what **exists** (the versions shelf), and they are different
+questions.
 
 ## Read it without a credential
 
@@ -20,7 +21,7 @@ curl -s https://store.hive-mcp.com/api/versions   # what every artifact resolves
 curl -s https://store.hive-mcp.com/api/versions/hive-carto
 ```
 
-Prefer the CLI when it is installed — same data, readable:
+Prefer the CLI when it is installed. Same data, readable:
 
 ```bash
 hive addon search carto          # free text over id, name, blurb, tags, capabilities
@@ -50,11 +51,11 @@ quietly rendering nothing, because "I could not ask" is not "you own nothing".
 
 ## Subscribing
 
-1. **Sign in** at `auth.hive-mcp.com` — one realm, shared by every hive surface.
+1. **Sign in** at `auth.hive-mcp.com`, one realm shared by every hive surface.
 2. **Subscribe** at <https://store.hive-mcp.com/pricing>. Monero straight to a wallet
    the store runs, or by card.
 3. **Mint a token** in <https://store.hive-mcp.com/dashboard>. It is shown **once**.
-4. **Wire it up** — <https://store.hive-mcp.com/setup> renders the exact `deps.edn`
+4. **Wire it up**. <https://store.hive-mcp.com/setup> renders the exact `deps.edn`
    and `settings.xml` with this account's real coordinates substituted in.
 
 Step 4 is the same recipe the `hive-mcp-setup` skill carries under "licensed build";
@@ -81,7 +82,7 @@ In the order worth checking:
 
 1. **The repo ids disagree.** The `:mvn/repos` key in `deps.edn` and the `<id>` in
    `settings.xml` must both be `hive-store`. If they differ, Maven never attaches the
-   credential and the gateway sees an anonymous request — a 401 that reads like a
+   credential and the gateway sees an anonymous request, a 401 that reads like a
    permissions problem.
 2. **The token is in one field only.** It goes in `<username>` *and* `<password>`;
    aether sends either position depending on the request.
@@ -99,11 +100,11 @@ clj -Sforce -Sdeps '{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/
 ## Self-hosting or a dev store
 
 `HIVE_STORE_URL` points the CLI at another deployment. The apex `hive-mcp.com` is
-**not** the store — it is the landing page and answers 404 for every API path.
+**not** the store: it is the landing page and answers 404 for every API path.
 
 ## Entitlement is decided once
 
 Whether an addon may **mount** is decided by the licence gate inside the JVM that
 mounts it, offline, from an Ed25519-signed licence. Neither the CLI nor the store API
-is a second place that decision is made — an answer computed anywhere else is a
+is a second place that decision is made. An answer computed anywhere else is a
 second licence decision, which is exactly what the gate exists to prevent.
