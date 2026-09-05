@@ -90,15 +90,17 @@ func (sp *Spinner) Stop() {
 }
 
 // Success stops the spinner and shows success message
+// The message is data, not a format: a path or a version carrying a percent
+// verb would otherwise render as %!s(MISSING).
 func (sp *Spinner) Success(message string) {
 	sp.s.Stop()
-	PrintSuccess(message)
+	PrintSuccess("%s", message)
 }
 
 // Fail stops the spinner and shows error message
 func (sp *Spinner) Fail(message string) {
 	sp.s.Stop()
-	PrintError(message)
+	PrintError("%s", message)
 }
 
 // UpdateMessage changes the spinner message
