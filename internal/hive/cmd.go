@@ -99,15 +99,18 @@ Commands:
   detect  - Detect system prerequisites and installed components
   setup   - Install and configure hive-mcp components
   doctor  - Diagnose and fix common issues
+  guide   - Install the setup skills Claude Code reads
+  addon   - Browse the store catalog, scaffold an addon, render its skill
   help    - Display help information
 
 Examples:
   hive detect          # Check system prerequisites
   hive setup           # Run full setup
   hive doctor          # Diagnose issues
+  hive guide --install # Teach Claude Code how to finish the setup
   hive help detect     # Show help for detect command`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd, addonCmd, guideCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {

@@ -56,9 +56,40 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      # Raw binaries, not archives. install.sh fetches one file per tool and
+      # chmods it; an archive would make the installer depend on tar being
+      # present and on the layout inside it.
+      - name: Build release binaries
+        run: |
+          mkdir -p dist
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            for tool in hive hive-setup-mcp; do
+              GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 \
+                go build -trimpath -ldflags "-s -w" \
+                -o "dist/$tool-$os-$arch" "./cmd/$tool"
+            done
+          done
+          ls -l dist
+
       - name: Create GitHub release
         if: steps.check_release.outputs.exists == 'false'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           generate_release_notes: true
+          files: dist/*
+
+      # A release that already existed still gets the binaries: the tag guard
+      # above skips creation, and without this an install.sh pointing at that
+      # tag would 404 forever.
+      - name: Attach binaries to an existing release
+        if: steps.check_release.outputs.exists == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ steps.version.outputs.tag }}" dist/* --clobber
