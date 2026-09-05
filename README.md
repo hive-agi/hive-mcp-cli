@@ -23,9 +23,14 @@ The skills carry the whole procedure (prerequisites, the starter pack, the store
 gateway, the two credentials, and what to check when a step fails), so the
 assistant drives it instead of guessing.
 
-Add `--setup` to the one-liner to run `hive setup` unattended in the same pass. It is
-opt-in: cloning a repo, starting Docker services and editing a shell rc file out of a
-pipe is not something to do to a machine without being asked.
+To run `hive setup` unattended in the same pass, pass the flag through to the shell:
+
+```bash
+curl -fsSL https://hive-mcp.com/install.sh | sh -s -- --setup
+```
+
+It is opt-in: cloning a repo, starting Docker services and editing a shell rc file out
+of a pipe is not something to do to a machine without being asked.
 
 ### Or drive it yourself
 
