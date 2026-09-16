@@ -3,4 +3,4 @@
  :description "CLI interface for hive-mcp"
  :language :clojure
  :tags ["cli"] 
- :carto {:source-roots ["dev" "src" "test"]}}
+ :carto {:source-roots ["bb" "dev" "src" "test"]}}
