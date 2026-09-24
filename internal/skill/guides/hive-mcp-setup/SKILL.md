@@ -154,7 +154,21 @@ before it bumps a pin.
 
 ### 2. Give Maven the credential
 
-In `~/.m2/settings.xml`:
+Have the user run this themselves, in their own terminal, so the token never
+passes through the conversation:
+
+```bash
+hive store login           # prompts with hidden input, checks the token, writes settings.xml
+hive store login --check   # reports the wiring; changes nothing, prints no secret
+```
+
+It verifies the token against the gateway before writing, merges into an existing
+`~/.m2/settings.xml` without touching other servers, keeps a backup, writes mode
+0600, and warns when `~/.clojure/deps.edn` shadows the repo. **Never ask the user
+to paste the token into the chat.** If they already did, tell them to revoke it
+in the dashboard and mint a new one.
+
+Without the CLI, the same block by hand, in `~/.m2/settings.xml`:
 
 ```xml
 <settings>
@@ -181,9 +195,25 @@ clj -Sforce -Sdeps '{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/
 
 ### 4. Load them into the host
 
-Licensed addons mount the same way FOSS ones do: put their coordinates in
-`~/hive-mcp/local.deps.edn` (gitignored, merged by the launcher) and restart the
-host. `hive addon status` reports what actually mounted.
+Licensed addons mount the same way FOSS ones do, through the overlay
+`~/hive-mcp/local.deps.edn` (gitignored; `bin/hive-mcp-foss` merges it over
+`starter.deps.edn` at every boot). One command per addon:
+
+```bash
+hive addon add hive-carto     # coordinate + hive-store repo into the overlay
+```
+
+It creates the overlay when there is none and never rewrites one the user
+already has; then it prints the lines to merge. Restart the host after (quit and
+reopen Claude Code). By hand, the overlay looks like this:
+
+```clojure
+{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/maven"}}
+ :deps {io.github.hive-agi/hive-carto {:mvn/version "RELEASE"}}}
+```
+
+`hive addon coord <id>` prints the exact coordinate. `hive addon status` reports
+what actually mounted.
 
 ### When a licensed resolve fails
 

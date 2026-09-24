@@ -9,6 +9,7 @@ import (
 	"github.com/BuddhiLW/bonzai"
 	"github.com/fatih/color"
 	"github.com/hive-agi/hive-mcp-cli/internal/addon"
+	"github.com/hive-agi/hive-mcp-cli/internal/setup"
 	"github.com/hive-agi/hive-mcp-cli/internal/store"
 )
 
@@ -32,6 +33,7 @@ var addonCmd = &bonzai.Cmd{
   hive addon search [query]     search the store; --shelf narrows to a tag
   hive addon show <id>          one addon in full, and whether you own it
   hive addon coord <id>         the deps.edn entry to add
+  hive addon add <id>           load it into your hive-mcp host (~/hive-mcp/local.deps.edn)
   hive addon skill [<id>]       render Claude Code skills from the catalog
   hive addon skill --install    write them to ~/.claude/skills
   hive addon new <id>           scaffold your own addon in this project
@@ -52,7 +54,7 @@ An addon you bought is extended by COMPOSING it: declare it in
 constructor under :mount/dependencies. You never edit the vendor jar, and it
 stays sealed.`,
 
-	Cmds: []*bonzai.Cmd{addonSearchCmd, addonShowCmd, addonCoordCmd, addonSkillCmd, addonNewCmd, addonStatusCmd},
+	Cmds: []*bonzai.Cmd{addonSearchCmd, addonShowCmd, addonCoordCmd, addonAddCmd, addonSkillCmd, addonNewCmd, addonStatusCmd},
 
 	Do: func(x *bonzai.Cmd, args ...string) error { return showHelp(x) },
 }
@@ -235,6 +237,57 @@ var addonCoordCmd = &bonzai.Cmd{
 			return fmt.Errorf("no addon matches %q unambiguously", args[0])
 		}
 		fmt.Print(addon.Coordinate(a.Coordinate, a.Version, store.BaseURL()))
+		return nil
+	},
+}
+
+var addonAddCmd = &bonzai.Cmd{
+	Name:  "add",
+	Alias: "install|load",
+	Short: "load an addon into your hive-mcp host",
+
+	Mcp: &bonzai.McpMeta{
+		Desc: "Put an addon's coordinate, and the hive-store repo, into the host overlay ~/hive-mcp/local.deps.edn, which bin/hive-mcp-foss merges at boot. Creates the file when absent; never rewrites an existing one (prints the lines to paste instead). Restart the host afterwards.",
+		Params: []bonzai.McpParam{
+			{Name: "id", Desc: "Addon id, or an unambiguous shorthand", Type: "string"},
+		},
+	},
+
+	Do: func(x *bonzai.Cmd, args ...string) error {
+		if len(args) < 1 {
+			return fmt.Errorf("which addon? try `hive addon search`")
+		}
+		cat, _, err := fetchCatalog()
+		if err != nil {
+			return err
+		}
+		a, ok := store.Find(cat.Addons, args[0])
+		if !ok {
+			return fmt.Errorf("no addon matches %q unambiguously; try `hive addon search %s`", args[0], args[0])
+		}
+		if a.Status != "" && a.Status != "available" {
+			return fmt.Errorf("%s is %s, not available: its coordinate does not resolve yet", a.ID, a.Status)
+		}
+		path := addon.OverlayPath(setup.DefaultHiveMCPDir())
+		res, snippet, err := addon.AddToOverlay(path, a.Coordinate, a.Version, store.BaseURL())
+		if err != nil {
+			return err
+		}
+		switch res {
+		case addon.OverlayCreated:
+			fmt.Println(color.GreenString("  ok"), "wrote", path)
+		case addon.OverlayPresent:
+			fmt.Println(color.GreenString("  ok"), a.Coordinate, "is already in", path)
+		default:
+			fmt.Println(path, "exists and is yours, so it was left alone. Merge these into its map:")
+			fmt.Println()
+			fmt.Print(snippet)
+			fmt.Println()
+		}
+		if w := store.Inspect(); !w.ServerFound {
+			fmt.Println(color.YellowString("  --"), "no hive-store token in ~/.m2/settings.xml yet; a paid addon will not resolve. Run: hive store login")
+		}
+		fmt.Println("Restart the host to load it: quit and reopen Claude Code (or /mcp, reconnect hive).")
 		return nil
 	},
 }

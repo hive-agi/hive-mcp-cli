@@ -82,17 +82,34 @@ hive guide             # the setup skills this binary carries
 hive guide --install   # write them to ~/.claude/skills
 hive addon search kg   # browse the store catalog
 hive addon show hive-carto
+hive store login       # subscribers: artifact token into ~/.m2/settings.xml, checked first
+hive addon add hive-carto   # load a bought addon into the host (~/hive-mcp/local.deps.edn)
 ```
+
+A subscriber's whole licensed setup, after `hive setup`, is those last two
+commands and a restart of Claude Code.
 
 ## What `hive setup` does
 
 1. **Clone** hive-mcp to `~/hive-mcp` (`HIVE_MCP_DIR` overrides)
 2. **Shell**: exports `HIVE_MCP_DIR` in your shell rc file
-3. **Prerequisites**: Java 21, Clojure CLI, Docker, Git (platform package manager)
+3. **Prerequisites**: Java 21, Clojure CLI, Docker (and compose), Git; on Linux also
+   adds you to the `docker` group, which a new login shell picks up
 4. **Dependencies**: resolves the classpath the launcher boots, core plus `starter.deps.edn`
 5. **Chroma**: starts the vector store with docker compose and waits for its heartbeat
-6. **Ollama**: pulls the embedding model when Ollama is installed
-7. **Register**: `claude mcp add hive -- ~/hive-mcp/bin/hive-mcp-foss`
+6. **Ollama**: pulls the embedding model when Ollama is installed, skips otherwise
+7. **Register**: `claude mcp add --scope user hive -- ~/hive-mcp/bin/hive-mcp-foss`,
+   so every project sees it
+
+## Testing the customer path
+
+`test/vm/customer-journey.sh` replays a customer's first run on a throwaway
+VirtualBox VM (stock Ubuntu 24.04, no root needed on the host): Claude Code,
+`install.sh`, `hive setup`, then `claude mcp list` from an unrelated project in a
+new login shell, and a `local.deps.edn` overlay reaching the classpath. PASS/FAIL
+per stage. `--dev` uses this checkout's `install.sh` and binary instead of the
+release; `HIVE_MCP_LAUNCHER=path/to/bin/hive-mcp-foss` swaps in a dev launcher.
+`test/vm/hive-vm` drives the VM by hand (`up`, `ssh`, `run`, `snap`, `back`).
 
 With `--emacs`, Doom sync and the Emacs daemon run before registration. Without it the
 Emacs vessel stays dormant until a daemon appears, and lings run in tmux.

@@ -101,6 +101,7 @@ Commands:
   doctor  - Diagnose and fix common issues
   guide   - Install the setup skills Claude Code reads
   addon   - Browse the store catalog, scaffold an addon, render its skill
+  store   - Wire this machine to the store: hive store login
   help    - Display help information
 
 Examples:
@@ -110,7 +111,7 @@ Examples:
   hive guide --install # Teach Claude Code how to finish the setup
   hive help detect     # Show help for detect command`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd, addonCmd, guideCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd, addonCmd, storeCmd, guideCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {

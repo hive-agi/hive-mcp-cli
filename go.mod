@@ -7,6 +7,7 @@ require (
 	github.com/briandowns/spinner v1.23.0
 	github.com/fatih/color v1.16.0
 	github.com/mark3labs/mcp-go v0.43.2
+	golang.org/x/term v0.1.0
 )
 
 require (
@@ -21,6 +22,5 @@ require (
 	github.com/wk8/go-ordered-map/v2 v2.1.8 // indirect
 	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
 	golang.org/x/sys v0.14.0 // indirect
-	golang.org/x/term v0.1.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
