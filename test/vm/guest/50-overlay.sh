@@ -10,10 +10,12 @@ cat > local.deps.edn <<'EDN'
 EDN
 ( sleep 150 ) | timeout 170 bin/hive-mcp-foss >/dev/null 2>/tmp/overlay.err &
 # The HOST's JVM, recognised by a starter-pack jar on its classpath (the project's
-# own dirs appear relative, as "src"). The launcher starts a short-lived JVM first,
-# to merge the overlay, which must not be mistaken for it.
+# own dirs appear relative, as "src"). Two short-lived JVMs come first and must not
+# be mistaken for it: the launcher's overlay merge, and the clojure CLI's tools.deps
+# resolver, whose ARGS carry the merged deps map and so name hive-datahike too. On a
+# cold machine the resolver runs long enough to be seen. Only the host has the JAR.
 for i in $(seq 1 150); do
-  cp="$(ps -ww -eo args | grep -E 'java .*hive-datahike' | grep -v grep | head -1)"
+  cp="$(ps -ww -eo args | grep -E 'java .*hive-datahike-[^ :]*\.jar' | grep -v grep | head -1)"
   [ -n "$cp" ] && break
   sleep 1
 done
