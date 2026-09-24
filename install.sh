@@ -219,6 +219,9 @@ verify_checksum() {
   name="$1"
   want="$(sed -n "s/^\([0-9a-f]\{64\}\)[ *]*$name\$/\1/p" "$TMP/SHA256SUMS" | head -1)"
   [ -n "$want" ] || die "SHA256SUMS names no entry for $name. Refusing to install an unlisted file."
+  # A missing file is this script's bug, not an attack; say which, so nobody is told
+  # their download was tampered with when it was never looked at.
+  [ -f "$TMP/$name" ] || die "internal error: $name was not downloaded to $TMP. Please report this."
   got="$(sha256_of "$TMP/$name")" \
     || die "no sha256 tool found (sha256sum, shasum or openssl). Refusing to install unverified binaries."
   [ "$want" = "$got" ] || die "checksum mismatch for $name.
@@ -250,8 +253,10 @@ download_and_verify() {
       go install github.com/$REPO/cmd/hive@latest"
   fetch "$base/SHA256SUMS.sig" "$TMP/SHA256SUMS.sig" 2>/dev/null || true
 
+  # Saved under the ASSET name, because that is the name SHA256SUMS lists and the
+  # name verify_checksum hashes. Renamed to the tool name only once it matched.
   for tool in hive hive-setup-mcp; do
-    fetch "$base/$tool-$OS-$ARCH" "$TMP/$tool" \
+    fetch "$base/$tool-$OS-$ARCH" "$TMP/$tool-$OS-$ARCH" \
       || die "no release binary for $OS/$ARCH in v$VERSION"
   done
 
@@ -261,7 +266,7 @@ download_and_verify() {
 
   for tool in hive hive-setup-mcp; do
     verify_checksum "$tool-$OS-$ARCH"
-    mv "$TMP/$tool" "$TMP/$tool.verified" && mv "$TMP/$tool.verified" "$TMP/$tool"
+    mv "$TMP/$tool-$OS-$ARCH" "$TMP/$tool"
   done
   TIER_SUM="verified: sha256 of every file matched SHA256SUMS"
 
