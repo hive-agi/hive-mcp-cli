@@ -96,22 +96,23 @@ var Cmd = &bonzai.Cmd{
 	Long: `hive-mcp-cli automates the installation and verification of hive-mcp.
 
 Commands:
-  detect  - Detect system prerequisites and installed components
   setup   - Install and configure hive-mcp components
+  login   - Sign in to your hive account (opens the browser)
+  logout  - Sign out and revoke this machine's tokens
+  auth    - Who is signed in; print the session token
+  addon   - Browse the store, load an addon into the host, scaffold your own
   doctor  - Diagnose and fix common issues
+  detect  - Detect system prerequisites and installed components
   guide   - Install the setup skills Claude Code reads
-  addon   - Browse the store catalog, scaffold an addon, render its skill
-  store   - Wire this machine to the store: hive store login
+  store   - Paste an artifact token by hand (hive store login)
   help    - Display help information
 
-Examples:
-  hive detect          # Check system prerequisites
-  hive setup           # Run full setup
-  hive doctor          # Diagnose issues
-  hive guide --install # Teach Claude Code how to finish the setup
-  hive help detect     # Show help for detect command`,
+Getting started:
+  hive setup                 # the FOSS stack, registered with Claude Code
+  hive login                 # subscribers: sign in; paid addons now resolve
+  hive addon add hive-carto  # load one into the host, then restart Claude Code`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, detectCmd, setupCmd, doctorCmd, addonCmd, storeCmd, guideCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {
@@ -236,10 +237,12 @@ dormant until a daemon appears; lings run in tmux.`,
 		fmt.Println()
 		fmt.Println("Setup complete!")
 		fmt.Println()
-		fmt.Println("Next steps:")
-		fmt.Println("  1. Restart your shell or run: source ~/.bashrc")
-		fmt.Println("  2. Verify with: hive doctor  (and: claude mcp list)")
-		fmt.Println("  3. Start using: claude   (the first call boots bin/hive-mcp-foss)")
+		fmt.Println("Next:")
+		fmt.Println("  1. Open a NEW terminal (it picks up HIVE_MCP_DIR and the docker group)")
+		fmt.Println("  2. Run claude in any project. The first start boots hive, about a minute.")
+		fmt.Println()
+		fmt.Println("Subscribers: hive login, then hive addon add <id> for each paid addon.")
+		fmt.Println("Something off? hive doctor")
 		fmt.Println()
 
 		return nil

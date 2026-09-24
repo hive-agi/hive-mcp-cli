@@ -85,6 +85,25 @@ func TestUpsertServerEscapesToken(t *testing.T) {
 	}
 }
 
+func TestRemoveServerOnlyRemovesOurToken(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "settings.xml")
+	doc, _ := UpsertServer("", "clojars", "mine")
+	doc, _ = UpsertServer(doc, RepoID, "hv_live_ours")
+	os.WriteFile(path, []byte(doc), 0o600)
+
+	if removed, _ := RemoveServerIfToken(path, RepoID, "hv_live_someone_else"); removed {
+		t.Fatal("removed a block holding a different token")
+	}
+	removed, err := RemoveServerIfToken(path, RepoID, "hv_live_ours")
+	if err != nil || !removed {
+		t.Fatalf("removed=%v err=%v", removed, err)
+	}
+	b, _ := os.ReadFile(path)
+	if strings.Contains(string(b), RepoID) || !strings.Contains(string(b), "<id>clojars</id>") {
+		t.Errorf("after removal:\n%s", b)
+	}
+}
+
 func TestWriteSettingsBacksUpAndIsPrivate(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".m2", "settings.xml")

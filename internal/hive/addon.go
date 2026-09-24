@@ -43,7 +43,7 @@ var addonCmd = &bonzai.Cmd{
 
 Environment:
   HIVE_STORE_URL     the store to talk to (default https://store.hive-mcp.com)
-  HIVE_STORE_TOKEN   your store token; search works without it
+  HIVE_STORE_TOKEN   overrides the hive login session (CI); search works without either
 
 Registering your own addon needs no account and no upload. The mounter scans
 the classpath for META-INF/hive-addons/*.edn and mounts what it finds, whoever
@@ -142,7 +142,7 @@ var addonSearchCmd = &bonzai.Cmd{
 		fmt.Println()
 		fmt.Printf("%d of %d addon(s). `hive addon show <id>` for detail.\n", len(hits), len(cat.Addons))
 		if sub == nil {
-			fmt.Println("OWNED is unknown without a token: set HIVE_STORE_TOKEN.")
+			fmt.Println("OWNED is unknown until you sign in: hive login")
 		}
 		return nil
 	},
@@ -202,7 +202,7 @@ var addonShowCmd = &bonzai.Cmd{
 		fmt.Println()
 		switch {
 		case sub == nil:
-			fmt.Println("  Ownership unknown: set HIVE_STORE_TOKEN.")
+			fmt.Println("  Ownership unknown until you sign in: hive login")
 		case store.Entitled(sub, a.ID):
 			fmt.Println(" ", color.GreenString("You own this."), "`hive addon coord "+a.ID+"` for the deps.edn entry.")
 		default:

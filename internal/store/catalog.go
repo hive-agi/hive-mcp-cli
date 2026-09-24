@@ -21,6 +21,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/hive-agi/hive-mcp-cli/internal/auth"
 )
 
 // DefaultBaseURL is the public storefront. HIVE_STORE_URL overrides it, which
@@ -42,8 +44,20 @@ func BaseURL() string {
 
 // Token is the customer's store token, used as a bearer credential. Absent for
 // anonymous browsing, which the catalog allows.
+//
+// HIVE_STORE_TOKEN wins, for CI and scripts. Otherwise it is the session
+// `hive login` left behind, refreshed when it has expired.
 func Token() string {
-	return strings.TrimSpace(os.Getenv("HIVE_STORE_TOKEN"))
+	if t := strings.TrimSpace(os.Getenv("HIVE_STORE_TOKEN")); t != "" {
+		return t
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	t, err := auth.AccessToken(ctx)
+	if err != nil {
+		return ""
+	}
+	return t
 }
 
 // ExtensionPoint is one seam an addon opens for providers.
@@ -160,7 +174,7 @@ func (c *Client) get(ctx context.Context, path string, into any) error {
 	defer resp.Body.Close()
 	switch {
 	case resp.StatusCode == http.StatusUnauthorized:
-		return fmt.Errorf("%s: not authorized. Set HIVE_STORE_TOKEN to a store token", path)
+		return fmt.Errorf("%s: not authorized. Run hive login (or set HIVE_STORE_TOKEN)", path)
 	case resp.StatusCode >= 400:
 		// Name the host, not just the path: the commonest cause of a 404 here
 		// is a HIVE_STORE_URL aimed at something that is not the store, and an
@@ -187,7 +201,7 @@ func (c *Client) Catalog(ctx context.Context) (*Catalog, error) {
 // Me fetches the caller's identity and entitlement. Requires a token.
 func (c *Client) Me(ctx context.Context) (*Me, error) {
 	if c.Token == "" {
-		return nil, fmt.Errorf("no store token: set HIVE_STORE_TOKEN")
+		return nil, fmt.Errorf("not signed in: run hive login (or set HIVE_STORE_TOKEN)")
 	}
 	var me Me
 	if err := c.get(ctx, "/api/me", &me); err != nil {

@@ -192,4 +192,3 @@ func PrintResult(r *DetectionResult, colorize func(Status, string) string) {
 		fmt.Println("\n" + colorize(StatusWarning, "!") + " Not ready yet. Run 'hive setup': it installs Java, Clojure and Docker, clones hive-mcp and starts its services")
 	}
 }
-

@@ -1,0 +1,73 @@
+{
+  "realm": "hive",
+  "enabled": true,
+  "sslRequired": "none",
+  "users": [
+    {
+      "username": "customer@example.com",
+      "email": "customer@example.com",
+      "emailVerified": true,
+      "firstName": "Test",
+      "lastName": "Customer",
+      "enabled": true,
+      "realmRoles": ["default-roles-hive"],
+      "credentials": [{ "type": "password", "value": "correct horse", "temporary": false }]
+    },
+    {
+      "username": "no-offline@example.com",
+      "email": "no-offline@example.com",
+      "emailVerified": true,
+      "firstName": "Session",
+      "lastName": "Only",
+      "enabled": true,
+      "realmRoles": ["session-only"],
+      "credentials": [{ "type": "password", "value": "correct horse", "temporary": false }]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "session-only",
+        "description": "a role WITHOUT offline_access, to prove hive login falls back to a session-length sign-in"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "hive-store",
+      "bearerOnly": true,
+      "enabled": true
+    },
+    {
+      "clientId": "hive-cli",
+      "name": "hive CLI",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://127.0.0.1/callback"],
+      "webOrigins": [],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "oauth2.device.authorization.grant.enabled": "true",
+        "oauth2.device.code.lifespan": "600",
+        "oauth2.device.polling.interval": "1"
+      },
+      "protocolMappers": [
+        {
+          "name": "hive-store-audience",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-audience-mapper",
+          "config": {
+            "included.client.audience": "hive-store",
+            "access.token.claim": "true",
+            "id.token.claim": "false"
+          }
+        }
+      ],
+      "defaultClientScopes": ["acr", "basic", "email", "profile", "roles", "web-origins"],
+      "optionalClientScopes": ["offline_access"]
+    }
+  ]
+}

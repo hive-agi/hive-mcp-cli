@@ -29,7 +29,7 @@ var addonSkillCmd = &bonzai.Cmd{
 		Params: []bonzai.McpParam{
 			{Name: "id", Desc: "Addon id, or an unambiguous shorthand. Omit for every addon.", Type: "string"},
 			{Name: "install", Desc: "Write the skills to disk instead of printing them", Type: "boolean"},
-			{Name: "owned", Desc: "Only addons the current HIVE_STORE_TOKEN is entitled to", Type: "boolean"},
+			{Name: "owned", Desc: "Only addons the signed-in account (hive login) is entitled to", Type: "boolean"},
 		},
 	},
 
@@ -53,7 +53,7 @@ cannot go stale, and a pasted command that does not run is worse than none.
 Environment:
   HIVE_SKILLS_DIR    where --install writes (default ~/.claude/skills)
   HIVE_STORE_URL     the store to talk to (default https://store.hive-mcp.com)
-  HIVE_STORE_TOKEN   your store token; rendering works without it`,
+  HIVE_STORE_TOKEN   overrides the hive login session (CI); rendering works without either`,
 
 	Do: func(x *bonzai.Cmd, args ...string) error {
 		install, owned, rest := skillFlags(args)
@@ -147,7 +147,7 @@ func skillTargets(cat *store.Catalog, client *store.Client, owned bool, ids []st
 	}
 	sub := entitlement(client)
 	if sub == nil {
-		return nil, fmt.Errorf("--owned needs a token: set HIVE_STORE_TOKEN, or drop --owned to render the whole catalog")
+		return nil, fmt.Errorf("--owned needs you signed in: run hive login, or drop --owned to render the whole catalog")
 	}
 	out := make([]store.Addon, 0, len(cat.Addons))
 	for _, a := range cat.Addons {

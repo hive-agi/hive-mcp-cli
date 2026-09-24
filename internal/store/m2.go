@@ -138,6 +138,40 @@ func WriteSettings(path, id, token string) (backup string, err error) {
 	return backup, os.Rename(tmp, path)
 }
 
+// RemoveServerIfToken deletes the id server block from the settings file at
+// path, but only when it carries token: a block the user pasted by hand, or a
+// token from another login, is theirs and stays. Reports whether it removed one.
+func RemoveServerIfToken(path, id, token string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	doc := string(b)
+	start, end, ok := findServer(doc, id)
+	if !ok {
+		return false, nil
+	}
+	if u := usernameRe.FindStringSubmatch(doc[start:end]); u == nil || u[1] != xmlEscape(token) {
+		return false, nil
+	}
+	lineStart := strings.LastIndex(doc[:start], "\n") + 1
+	if strings.TrimSpace(doc[lineStart:start]) != "" {
+		lineStart = start
+	}
+	if end < len(doc) && doc[end] == '\n' {
+		end++
+	}
+	updated := doc[:lineStart] + doc[end:]
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, []byte(updated), 0o600); err != nil {
+		return false, err
+	}
+	return true, os.Rename(tmp, path)
+}
+
 // Wiring is what `hive store login --check` reports. Each field is a fact about
 // this machine, not a verdict, so the caller decides how loud to be.
 type Wiring struct {
