@@ -1,6 +1,6 @@
 ---
 name: hive-store
-description: Use the hive store: browse the addon catalog, understand what an addon does and what it depends on, subscribe, mint an artifact token, and make a licensed coordinate resolve. Use when the user asks what hive addons exist, what a subscription includes, how to buy or pay for one, how to mint or revoke a token, why a licensed artifact will not resolve, or what version an addon is on. Covers the public API endpoints an agent or a build can read without any credential.
+description: Use the hive store: browse the addon catalog, understand what an addon does and what it depends on, subscribe, sign a machine in with hive login, and make a licensed coordinate resolve. Use when the user asks what hive addons exist, what a subscription includes, how to buy or pay for one, how to mint or revoke a token, why a licensed artifact will not resolve, or what version an addon is on. Covers the public API endpoints an agent or a build can read without any credential.
 ---
 
 # The hive store
@@ -46,35 +46,41 @@ hive addon skill --install              # write every addon's skill to ~/.claude
 hive addon skill --owned --install      # only what this account is entitled to
 ```
 
-`--owned` needs `HIVE_STORE_TOKEN`; without it the command errors rather than
-quietly rendering nothing, because "I could not ask" is not "you own nothing".
+`--owned` needs a signed-in account (`hive login`); without one the command errors
+rather than quietly rendering nothing, because "I could not ask" is not "you own
+nothing".
 
 ## Subscribing
 
-1. **Sign in** at `auth.hive-mcp.com`, one realm shared by every hive surface.
-2. **Subscribe** at <https://store.hive-mcp.com/pricing>. Monero straight to a wallet
+1. **Subscribe** at <https://store.hive-mcp.com/pricing>. Monero straight to a wallet
    the store runs, or by card.
-3. **Mint a token** in <https://store.hive-mcp.com/dashboard>. It is shown **once**.
-4. **Wire it up**. <https://store.hive-mcp.com/setup> renders the exact `deps.edn`
-   and `settings.xml` with this account's real coordinates substituted in.
+2. **Sign this machine in**: `hive login`. It opens the browser (or prints a one-time
+   code on a machine without one), mints an artifact token named after the machine,
+   and writes it where Maven reads it. You may run it for the user; nothing secret
+   passes through the conversation.
+3. **Load what they bought**: `hive addon add <id>`, then restart Claude Code.
 
-Step 4 is the same recipe the `hive-mcp-setup` skill carries under "licensed build";
-use that skill for the full machine setup, this one for the store itself.
+`hive auth status` says who is signed in and whether the gateway accepts the token.
+`hive logout` revokes this machine's token and forgets the session.
+
+Without the CLI (CI, another build tool): mint a token in
+<https://store.hive-mcp.com/dashboard> (shown **once**), and
+<https://store.hive-mcp.com/setup> renders the exact `deps.edn` and `settings.xml`.
 
 ## The two credentials
 
-They are not interchangeable, and mixing them up is the usual failure:
+`hive login` handles both. They still differ, and it matters when diagnosing:
 
-| | Artifact token | Store session token |
+| | Artifact token | Session |
 |---|---|---|
-| Looks like | `hv_live_…` | an OIDC access token |
-| Comes from | the dashboard, shown once | signing in at `auth.hive-mcp.com` |
-| Lives in | `~/.m2/settings.xml` | `HIVE_STORE_TOKEN` |
+| Looks like | `hv_live_…` | an OIDC access token, refreshed automatically |
+| Comes from | `hive login` (one per machine), or the dashboard | `hive login` |
+| Lives in | `~/.m2/settings.xml` | the system keyring; `HIVE_STORE_TOKEN` overrides |
 | Authenticates | Basic auth to `/maven` | Bearer to `/api/me`, `/api/license`, `/api/tokens` |
-| Used by | tools.deps, Maven, your build | `hive addon --owned`, the dashboard |
+| Used by | tools.deps, Maven, your build | `hive addon --owned`, `hive auth token` |
 
 Revoking an artifact token in the dashboard stops it resolving immediately. There is
-no cache to wait out.
+no cache to wait out. Each machine's token is listed there under its hostname.
 
 ## Why a licensed coordinate will not resolve
 

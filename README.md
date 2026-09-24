@@ -1,31 +1,138 @@
 # hive-mcp-cli
 
-Automated setup CLI for [hive-mcp](https://github.com/hive-agi/hive-mcp), the Clojure MCP
-host that gives Claude Code persistent memory, a knowledge graph, kanban and swarm
-coordination. It installs the **batteries-included FOSS stack**: the hive-mcp core plus the
-starter pack of open-source addons, wired into Claude Code through `bin/hive-mcp-foss`.
+The `hive` command: sets up [hive-mcp](https://github.com/hive-agi/hive-mcp) on your
+machine and signs you in to your hive account. hive-mcp gives Claude Code persistent
+memory, a knowledge graph, kanban and swarm coordination.
 
-## Installation
+## Quick start
 
 ```bash
-curl -fsSL https://hive-mcp.com/install.sh | sh
+curl -fsSL https://hive-mcp.com/install.sh | sh    # 1. the hive CLI (10 seconds)
+hive setup                                         # 2. everything else (about 5 minutes)
 ```
 
-That installs the `hive` CLI, writes the setup skills into `~/.claude/skills`, and
-registers the setup helper with Claude Code. Then start Claude Code and say what you
-want:
+Open a **new terminal**, start `claude` in any project, and hive is there. That is the
+free (FOSS) build, and it needs no account.
 
-> help me set up the hive-mcp harness locally, I have a key
+**Subscribers** add one more step:
 
-> help me set up a FOSS build of the hive-mcp harness
+```bash
+hive login                  # opens your browser; sign in; you are done
+hive addon add hive-carto   # any addon on your plan; then restart Claude Code
+```
 
-The skills carry the whole procedure (prerequisites, the starter pack, the store
-gateway, the two credentials, and what to check when a step fails), so the
-assistant drives it instead of guessing.
+No keys to copy, no XML to paste.
 
-Every downloaded file is checked against a signed `SHA256SUMS` before it is made
-executable, and the installer prints which checks it managed. To read the script
-first and check it against a second origin:
+<details>
+<summary>What <code>hive setup</code> does, and what it needs</summary>
+
+It runs on Linux (apt) and macOS (Homebrew). It asks for `sudo` once, to install packages.
+
+1. **Clones** hive-mcp to `~/hive-mcp` (`HIVE_MCP_DIR` overrides).
+2. **Exports** `HIVE_MCP_DIR` in your shell rc file.
+3. **Installs** what is missing: Java 21, the Clojure CLI, Docker with compose, and Git.
+   On Linux it adds you to the `docker` group. A new terminal picks that up.
+4. **Resolves** the host's dependencies: the core plus the FOSS starter pack.
+5. **Starts** Chroma, the vector store, with Docker.
+6. **Pulls** the embedding model if [Ollama](https://ollama.com) is installed, and skips this otherwise.
+7. **Registers** hive with Claude Code for every project:
+   `claude mcp add --scope user hive -- ~/hive-mcp/bin/hive-mcp-foss`.
+
+Every step checks first, so re-running `hive setup` is always safe. The first time
+Claude Code starts hive, the host needs about a minute to boot.
+
+You need [Claude Code](https://claude.ai/download). These are optional:
+
+- **Ollama**, for semantic search over memory.
+- **Emacs 28.1+**, for the Emacs vessel (`hive setup --emacs`).
+- **tmux** with Python's `libtmux`, for headless lings.
+- **clojure-lsp, clj-kondo and scc**, for the code-intelligence addons.
+
+Each missing one turns off that one feature. It never fails the setup.
+</details>
+
+## Signing in
+
+`hive login` works like `gh auth login`:
+
+- **With a browser**, it opens the sign-in page and waits for the redirect back to the
+  CLI. You sign in the way you do on the web, including a second factor if your account
+  has one.
+- **Over ssh, or on a machine without a display**, it prints a one-time code instead:
+
+  ```
+    First copy your one-time code: WDJB-MJHT
+    Then open:                     https://auth.hive-mcp.com/realms/hive/device
+  ```
+
+  Open that URL on your laptop or phone, enter the code, and approve. The terminal
+  continues. `hive login --device` forces this mode.
+
+Once signed in, the CLI:
+
+1. keeps your session in the **system keyring**: GNOME Keyring or KWallet, the macOS
+   Keychain, or the Windows Credential Manager. A machine without a keyring uses
+   `~/.config/hive/credentials.json` instead, mode 0600, and `hive login` says so.
+2. creates an **artifact token for this machine only**, named after its hostname.
+   It writes the token to `~/.m2/settings.xml`, which is what lets Maven download
+   paid addons. The token appears in your dashboard, so you can revoke it there.
+3. prints who you are signed in as and what your plan includes.
+
+```bash
+hive auth status   # who is signed in, where the session is stored, what is set up
+hive auth token    # a current access token, for scripts that call the store API
+hive logout        # revokes this machine's token, removes it, ends the session
+```
+
+In CI, where no browser is available, pass a token you created in the dashboard:
+`printf %s "$HIVE_ARTIFACT_TOKEN" | hive login --with-token`. Setting
+`HIVE_STORE_TOKEN` overrides the session for store API calls.
+
+## Adding addons
+
+```bash
+hive addon search            # the whole shelf; `hive addon search graph` narrows it
+hive addon show hive-carto   # what it does and needs, and whether your plan includes it
+hive addon add hive-carto    # load it into your host
+```
+
+`addon add` writes the coordinate to `~/hive-mcp/local.deps.edn`, your personal
+overlay. It is gitignored, and the launcher merges it over the starter pack at every
+boot. If you already wrote that file yourself, the command leaves it alone and prints
+the lines to add. After adding, restart Claude Code, or run `/mcp` and reconnect hive.
+
+## Let Claude do it
+
+The installer also teaches Claude Code the whole procedure. It installs two skills and
+a small setup MCP server. In Claude Code you can then say:
+
+> set up hive for me
+
+> I have a hive subscription, set up the paid addons
+
+Claude runs `hive setup`, `hive login` and `hive addon add` for you. Your password
+and tokens never pass through the conversation: the sign-in happens in your browser.
+
+## When something is wrong
+
+```bash
+hive doctor          # every check, with the fix for each failure
+hive doctor --fix    # applies the fixes it can
+```
+
+| Symptom | Fix |
+|---|---|
+| `claude mcp list` shows no `hive` | re-run `hive setup` |
+| hive is listed but `✘ Failed to connect` | run `~/hive-mcp/bin/hive-mcp-foss` in a terminal and read the log |
+| `permission denied` on the docker socket | open a new terminal; setup added you to the `docker` group |
+| a paid addon will not resolve | run `hive auth status`, then `hive login` again |
+| `hive login` says the server does not recognise this CLI | run `hive store login` and paste a token from the [dashboard](https://store.hive-mcp.com/dashboard) |
+
+## Verifying the installer
+
+Every binary is checked against a signed `SHA256SUMS` before it is made executable,
+and the installer prints which checks it managed. To read the script first, and check
+it against a second origin:
 
 ```bash
 curl -fsSL https://hive-mcp.com/install.sh -o install.sh
@@ -34,191 +141,67 @@ sha256sum -c install.sh.sha256
 less install.sh && sh install.sh
 ```
 
-See [Verifying the install](https://docs.hive-mcp.com/Verifying-The-Install.html)
-for what each tier proves and what it does not.
+`sh -s -- --setup` runs `hive setup` in the same pass. It is opt-in, because a script
+piped from the internet should not edit your shell config unless you ask it to.
+[Verifying the install](https://docs.hive-mcp.com/Verifying-The-Install.html) explains
+what each check proves.
 
-To run `hive setup` unattended in the same pass, pass the flag through to the shell:
-
-```bash
-curl -fsSL https://hive-mcp.com/install.sh | sh -s -- --setup
-```
-
-It is opt-in: cloning a repo, starting Docker services and editing a shell rc file out
-of a pipe is not something to do to a machine without being asked.
-
-### Or drive it yourself
-
-```bash
-hive detect
-hive setup
-hive doctor
-```
-
-### Or install the CLI with Go
+With Go, instead of the installer:
 
 ```bash
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive@latest
 go install github.com/hive-agi/hive-mcp-cli/cmd/hive-setup-mcp@latest
-hive guide --install                                     # the setup skills
-claude mcp add hive-setup --scope user -- hive-setup-mcp # the setup helper
+hive guide --install && claude mcp add hive-setup --scope user -- hive-setup-mcp
 ```
 
-Verify:
+## Command reference
 
-```bash
-hive doctor
-claude mcp list | grep hive   # hive: ~/hive-mcp/bin/hive-mcp-foss
-```
-
-## Usage
-
-```bash
-hive detect            # check prerequisites and running services
-hive setup             # full setup, idempotent
-hive setup --emacs     # also sync Doom and start the Emacs daemon
-hive doctor            # health checks
-hive doctor --fix      # attempt automatic fixes
-hive guide             # the setup skills this binary carries
-hive guide --install   # write them to ~/.claude/skills
-hive addon search kg   # browse the store catalog
-hive addon show hive-carto
-hive store login       # subscribers: artifact token into ~/.m2/settings.xml, checked first
-hive addon add hive-carto   # load a bought addon into the host (~/hive-mcp/local.deps.edn)
-```
-
-A subscriber's whole licensed setup, after `hive setup`, is those last two
-commands and a restart of Claude Code.
-
-## What `hive setup` does
-
-1. **Clone** hive-mcp to `~/hive-mcp` (`HIVE_MCP_DIR` overrides)
-2. **Shell**: exports `HIVE_MCP_DIR` in your shell rc file
-3. **Prerequisites**: Java 21, Clojure CLI, Docker (and compose), Git; on Linux also
-   adds you to the `docker` group, which a new login shell picks up
-4. **Dependencies**: resolves the classpath the launcher boots, core plus `starter.deps.edn`
-5. **Chroma**: starts the vector store with docker compose and waits for its heartbeat
-6. **Ollama**: pulls the embedding model when Ollama is installed, skips otherwise
-7. **Register**: `claude mcp add --scope user hive -- ~/hive-mcp/bin/hive-mcp-foss`,
-   so every project sees it
-
-## Testing the customer path
-
-`test/vm/customer-journey.sh` replays a customer's first run on a throwaway
-VirtualBox VM (stock Ubuntu 24.04, no root needed on the host): Claude Code,
-`install.sh`, `hive setup`, then `claude mcp list` from an unrelated project in a
-new login shell, and a `local.deps.edn` overlay reaching the classpath. PASS/FAIL
-per stage. `--dev` uses this checkout's `install.sh` and binary instead of the
-release; `HIVE_MCP_LAUNCHER=path/to/bin/hive-mcp-foss` swaps in a dev launcher.
-`test/vm/hive-vm` drives the VM by hand (`up`, `ssh`, `run`, `snap`, `back`).
-
-With `--emacs`, Doom sync and the Emacs daemon run before registration. Without it the
-Emacs vessel stays dormant until a daemon appears, and lings run in tmux.
-
-Every step is idempotent: a step whose `Check` already passes is skipped, and a failing
-step rolls back what it did.
-
-## The starter pack
-
-`starter.deps.edn` in the hive-mcp repo is the FOSS addon set merged over the core at boot:
-
-| Role | Addon | Needs on the host | Status |
-|---|---|---|---|
-| Vessel, where lings run | hive-emacs | an Emacs daemon | shipped |
-| Knowledge graph store | hive-datahike | nothing, embedded | shipped |
-| Vessel, headless | hive-tmux | tmux, Python 3 with libtmux | pending |
-| Harness bridge | hive-claude | Claude Code | pending |
-| Code intelligence | lsp-mcp, clj-kondo-mcp, scc-mcp, basic-tools-mcp | clojure-lsp, clj-kondo, scc | pending |
-
-Pending rows are commented in `starter.deps.edn` until their releases carry the addon
-manifest the host discovers them by. A host tool that is missing degrades that one addon
-with a logged reason; the boot still completes. `HIVE_STARTER=0 bin/hive-mcp-foss` boots
-the bare core.
-
-## Requirements
-
-| Tool | Minimum | Purpose |
-|------|---------|---------|
-| Go | 1.21+ | install this CLI |
-| Java | 21 | Clojure runtime (CI and the container image run 21) |
-| Clojure CLI | 1.12+ | run the host from source |
-| Docker | 20.0+ | Chroma and the clojure-lsp sidecar |
-| Git | 2.0+ | clone the repo and git-sourced addons |
-| Claude Code | latest | MCP client |
-
-### Optional
-
-- **tmux** (with Python 3 + libtmux) for the headless vessel
-- **Emacs 28.1+** (Doom recommended) for the Emacs vessel and IDE integration
-- **Ollama** for local embeddings (semantic search over memory)
-- **clojure-lsp, clj-kondo, scc** for the code-intelligence addons
-
-## Commands
-
-### `hive detect`
-
-Scans your system and reports platform and package manager, shell configuration files,
-installed tools and versions, running services (Emacs daemon, Chroma, Ollama) and
-environment variables.
-
-### `hive setup`
-
-Runs the installation sequence above. Idempotent: safe to run multiple times.
-
-### `hive doctor`
-
-Health checks for your installation: version verification, service health (Chroma, Ollama),
-environment validation, MCP registration (the `hive` server pointing at `bin/hive-mcp-foss`),
-launcher present and executable, nREPL reachable on 7910. Use `--fix` to attempt repairs.
-
-### `hive guide`
-
-Installs the setup skills Claude Code reads. They are compiled into the binary rather
-than fetched, so a first run on a bare machine leaves the procedure behind before a
-network, a token or hive-mcp exists.
-
-| Guide | Covers |
+| Command | Does |
 |---|---|
-| `hive-mcp-setup` | the whole machine setup, FOSS and licensed, and how to diagnose a bad one |
-| `hive-store` | the catalog, subscribing, the two credentials, why a coordinate will not resolve |
+| `hive setup [--emacs]` | installs and registers everything; safe to re-run |
+| `hive login [--device \| --with-token]` | signs in; creates this machine's artifact token |
+| `hive logout` | revokes and forgets this machine's credentials |
+| `hive auth status \| token` | shows who is signed in; prints an access token |
+| `hive addon search \| show \| add \| coord` | browses the store and loads an addon |
+| `hive addon skill [--owned] [--install]` | writes a Claude Code skill per addon |
+| `hive addon new <id> [--extends <other>]` | scaffolds your own addon |
+| `hive addon status` | shows what the host would mount, and why not |
+| `hive doctor [--fix]` | runs health checks |
+| `hive detect` | reports prerequisites and services, read-only |
+| `hive guide [--install]` | prints or installs the setup skills |
+| `hive store login [--check]` | pastes an artifact token by hand, or checks the wiring |
 
-Unlike `hive addon skill`, which projects a skill out of the store catalog, these are
-prose: nothing the store publishes describes how to install a JVM host.
-`HIVE_SKILLS_DIR` overrides where `--install` writes.
+Environment variables:
 
-### `hive addon`
+| Variable | Sets |
+|---|---|
+| `HIVE_MCP_DIR` | where the host is checked out (`~/hive-mcp`) |
+| `HIVE_STORE_URL` | the store (`https://store.hive-mcp.com`) |
+| `HIVE_AUTH_ISSUER`, `HIVE_AUTH_CLIENT_ID` | the sign-in realm and client, for a dev realm |
+| `HIVE_CREDENTIAL_STORE` | `keyring` or `file`, to force a backend |
+| `HIVE_CONFIG_DIR` | where the session is kept (`~/.config/hive`) |
 
-Reads the storefront catalog. `search`, `show`, `coord`, `status`, `skill`, and `new`
-to scaffold one. Public endpoints answer without a token; `--owned` needs
-`HIVE_STORE_TOKEN`.
+`hive-setup-mcp` exposes these commands as MCP tools (`hive_setup`, `hive_doctor`,
+`hive_addon_*`, and so on). Its schemas are generated by
+[Bonzai](https://github.com/rwxrob/bonzai) from each command's `Mcp` metadata.
 
-## MCP Server
-
-`hive-setup-mcp` exposes the CLI commands as MCP tools so an assistant can run the setup.
-
-```bash
-claude mcp add hive-setup -- hive-setup-mcp
-```
-
-| Tool | Description |
-|------|-------------|
-| `hive_detect` | Detect installed components, prerequisites, and environment |
-| `hive_setup` | Install and configure hive-mcp; `emacs` parameter adds the Emacs steps |
-| `hive_doctor` | Run health checks with optional `fix` parameter |
-| `hive_guide` | Install or print the setup skills compiled into the binary |
-| `hive_addon_*` | Browse the store catalog, render an addon's skill, scaffold a new one |
-
-The server uses [Bonzai](https://github.com/rwxrob/bonzai) with MCP extensions to
-generate tool schemas from command metadata. Only commands tagged with
-`Mcp: &bonzai.McpMeta{...}` are exposed.
-
-## Environment Variables
-
-After setup, your shell exports:
+## Development
 
 ```bash
-HIVE_MCP_DIR=~/hive-mcp
-OPENROUTER_API_KEY=<your-key>  # optional, for cloud LLM delegation
+go test ./...                        # unit tests
+test/auth/e2e.sh                     # hive login/logout against a real Keycloak 26 (docker)
+test/vm/customer-journey.sh --dev    # a customer's first run on a fresh Ubuntu VM
 ```
+
+- `test/auth/e2e.sh` starts the Keycloak version production runs, with the `hive-cli`
+  client configured as in `k8s-agi/terraform/keycloak-hive-realm/clients-cli.tf`. It
+  also starts a stand-in store that enforces the real store's `aud` check. It then
+  drives the real binary through both sign-in flows, token refresh, re-login and
+  logout. A scripted browser fills in the Keycloak pages.
+- `test/vm/customer-journey.sh` needs VirtualBox, but no root. It installs Claude
+  Code, runs `install.sh` and `hive setup`, and checks `claude mcp list` from an
+  unrelated project. It prints PASS or FAIL for each stage. `HIVE_MCP_LAUNCHER`
+  swaps in a dev launcher, and `test/vm/hive-vm` drives the VM by hand.
 
 ## License
 

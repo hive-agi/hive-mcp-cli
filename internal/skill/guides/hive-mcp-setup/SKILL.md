@@ -19,13 +19,13 @@ differs completely, and everything else is shared.
 | | FOSS build | Licensed build |
 |---|---|---|
 | Addons | `starter.deps.edn`, published on Clojars | the FOSS set **plus** subscription artifacts from the store gateway |
-| Credential | none | an artifact token, `hv_live_…` |
+| Credential | none | a hive account: `hive login` |
 | Gets you | memory, KG, kanban, swarm, session rituals, code intelligence | the above plus carto, hive-shape, hive-dsl, hive-test, hive-schemas … |
 
-If the user said "I have a key", they mean the licensed build, so go to
-[Licensed build](#licensed-build), but do part 1 first: **the token adds addons to a
-host that must already exist.** A subscriber with no hive-mcp on disk has nothing for
-the token to feed.
+If the user said "I have a key" or "I have a subscription", they mean the licensed
+build, so go to [Licensed build](#licensed-build), but do part 1 first: **the
+subscription adds addons to a host that must already exist.** The whole licensed path
+is `hive setup`, `hive login`, `hive addon add <id>`, then a restart of Claude Code.
 
 ---
 
@@ -122,19 +122,47 @@ check `hive doctor` for the verdict.
 
 ## Part 2b: licensed build {#licensed-build}
 
-There are **two different credentials** here and confusing them is the most common
-failure:
+### 1. Sign in: `hive login`
+
+```bash
+hive login
+```
+
+Run it yourself; it is safe to. It opens the sign-in page in the user's browser and
+waits. The user signs in there, with their second factor if they have one, and the
+command returns. Neither the password nor any token passes through this conversation.
+Then it:
+
+- keeps the session in the system keyring (or `~/.config/hive/credentials.json`, 0600,
+  on a machine without one),
+- mints an artifact token for this machine and writes it to `~/.m2/settings.xml`,
+  which is what makes paid addons resolve,
+- prints the account and the plan. No subscription means no artifact token, and says so.
+
+On a machine with no display (ssh, a server, a VM) it prints a **one-time code** and
+a URL instead. Relay both to the user: they open the URL on any device, type the
+code, and approve. `hive login --device` forces that. The code is useless without
+their approval, so showing it is fine.
+
+`hive auth status` confirms it afterwards and prints no secret.
+
+**Never ask the user to paste a token into the chat.** If they already did, tell them
+to revoke it in the dashboard; `hive login` makes a fresh one.
+
+If `hive login` says the sign-in server does not recognise this CLI, the realm does
+not have the `hive-cli` client yet. Fall back to the manual path below: the user
+mints a token in the dashboard and runs `hive store login` in their own terminal.
+
+<details><summary>The two credentials, for diagnosing</summary>
 
 | Credential | Where it comes from | Where it goes | What it opens |
 |---|---|---|---|
-| **Artifact token** `hv_live_…` | minted in the store dashboard, shown once | `~/.m2/settings.xml` | the Maven gateway, `store.hive-mcp.com/maven` |
-| **Store session token** (OIDC) | signing in at `auth.hive-mcp.com` | `HIVE_STORE_TOKEN` | the store API: `/api/me`, entitlements, `hive addon --owned` |
+| **Artifact token** `hv_live_…` | `hive login` mints one per machine; or the dashboard | `~/.m2/settings.xml` | the Maven gateway, `store.hive-mcp.com/maven` |
+| **Session** (OIDC) | `hive login` | the system keyring; `HIVE_STORE_TOKEN` overrides | the store API: `/api/me`, `/api/tokens`, `hive addon --owned` |
 
-The artifact token is the one that makes builds resolve. When the user says "I have a
-key", ask which of the two they hold; if they minted it in the dashboard, it is the
-artifact token.
+</details>
 
-### 1. Point the project at the gateway
+### Manual path: point a project at the gateway
 
 In the project's `deps.edn`, **not** in `~/.clojure/deps.edn`:
 
@@ -152,10 +180,10 @@ finds one by description. `https://store.hive-mcp.com/api/versions` answers what
 whole shelf resolves to, publicly and with no token. That is what a build asks
 before it bumps a pin.
 
-### 2. Give Maven the credential
+### Manual path: give Maven the credential
 
-Have the user run this themselves, in their own terminal, so the token never
-passes through the conversation:
+Only when `hive login` is not an option. Have the user run this themselves, in
+their own terminal, so the token never passes through the conversation:
 
 ```bash
 hive store login           # prompts with hidden input, checks the token, writes settings.xml
@@ -187,13 +215,13 @@ request, and a mismatch reads as anonymous, which the gateway answers with 401.
 
 The token never goes in `deps.edn` and never in a repository.
 
-### 3. Prove it resolves
+### 2. Prove it resolves
 
 ```bash
 clj -Sforce -Sdeps '{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/maven"}} :deps {io.github.hive-agi/hive-carto {:mvn/version "RELEASE"}}}' -e "(println :resolved)"
 ```
 
-### 4. Load them into the host
+### 3. Load them into the host
 
 Licensed addons mount the same way FOSS ones do, through the overlay
 `~/hive-mcp/local.deps.edn` (gitignored; `bin/hive-mcp-foss` merges it over

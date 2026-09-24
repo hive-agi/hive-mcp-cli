@@ -379,13 +379,16 @@ main() {
   report_trust
 
   say ""
-  say "${B}Done.${R} Start Claude Code in a project and say one of these:"
+  if [ "$RUN_SETUP" -eq 1 ]; then
+    say "${B}Done.${R} Open a new terminal and start ${B}claude${R} in any project."
+  else
+    say "${B}Done.${R} Next:"
+    say ""
+    say "  ${B}hive setup${R}     installs the rest and registers hive with Claude Code (~5 min)"
+  fi
+  say "  ${B}hive login${R}     subscribers: sign in in the browser; paid addons then resolve"
   say ""
-  say "  ${B}\"help me set up the hive-mcp harness locally, I have a key\"${R}"
-  say "  ${B}\"help me set up a FOSS build of the hive-mcp harness\"${R}"
-  say ""
-  say "${DIM}It reads the skills just installed and drives the rest.${R}"
-  say "${DIM}Prefer to do it yourself: ${R}hive detect${DIM}, then ${R}hive setup${DIM}, then ${R}hive doctor${DIM}.${R}"
+  say "${DIM}Or let Claude do it: start ${R}claude${DIM} and say \"set up hive for me\".${R}"
   say "${DIM}Docs: https://docs.hive-mcp.com   Addons: https://store.hive-mcp.com${R}"
   say ""
 }
