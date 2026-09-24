@@ -1,0 +1,233 @@
+#!/usr/bin/env bash
+# hive-vm: throwaway VirtualBox VMs that play a customer's fresh machine.
+#
+#   test/vm/hive-vm up [NAME]        create + boot a clean Ubuntu 24.04, wait for ssh
+#   test/vm/hive-vm ssh [NAME] [CMD] shell in (or run CMD) as the `customer` user
+#   test/vm/hive-vm run NAME SCRIPT  pipe a local script into the guest's login bash
+#   test/vm/hive-vm push NAME LOCAL REMOTE  copy a file in (a dev build of hive, say)
+#   test/vm/hive-vm snap [NAME] TAG  snapshot, so a failed step can be retried from here
+#   test/vm/hive-vm back [NAME] TAG  restore a snapshot (powers off first)
+#   test/vm/hive-vm list             the VMs this script made
+#   test/vm/hive-vm destroy NAME --i-mean-it   power off and delete the VM and its disk
+#
+# Why VirtualBox: it is what runs without root on a dev box that has no libvirt. The
+# guest is the stock Ubuntu cloud image plus cloud-init, nothing hive-specific, so what
+# fails in here fails for a customer too.
+#
+# Environment: HIVE_VM_CPUS (4), HIVE_VM_MEM MB (8192), HIVE_VM_DISK MB (40960),
+# HIVE_VM_CACHE (~/.cache/hive-vm), HIVE_VM_KEY (generated in the cache).
+
+set -euo pipefail
+
+CACHE="${HIVE_VM_CACHE:-$HOME/.cache/hive-vm}"
+IMAGE_URL="https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.vmdk"
+IMAGE="$CACHE/noble.vmdk"
+BASE="$CACHE/noble-base.vdi"
+CPUS="${HIVE_VM_CPUS:-4}"
+MEM="${HIVE_VM_MEM:-8192}"
+DISK="${HIVE_VM_DISK:-40960}"
+KEY="${HIVE_VM_KEY:-$CACHE/id_ed25519}"
+PREFIX="hive-vm-"
+
+die() { printf 'hive-vm: %s\n' "$*" >&2; exit 1; }
+log() { printf '==> %s\n' "$*" >&2; }
+
+vm_name() { printf '%s%s' "$PREFIX" "${1:-customer}"; }
+vm_dir()  { printf '%s/vms/%s' "$CACHE" "$(vm_name "$1")"; }
+exists()  { VBoxManage showvminfo "$(vm_name "$1")" >/dev/null 2>&1; }
+running() { VBoxManage list runningvms | grep -q "\"$(vm_name "$1")\""; }
+
+ssh_port() {
+  # The NAT rule is the source of truth, so a port survives a restart of this script.
+  VBoxManage showvminfo "$(vm_name "$1")" --machinereadable \
+    | sed -n 's/^Forwarding([0-9]*)="ssh,tcp,,\([0-9]*\),,22"$/\1/p'
+}
+
+free_port() {
+  local p
+  for p in $(seq 2222 2299); do
+    (echo >"/dev/tcp/127.0.0.1/$p") 2>/dev/null || { echo "$p"; return; }
+  done
+  die "no free port in 2222-2299"
+}
+
+ssh_opts() {
+  printf '%s\n' -i "$KEY" -p "$(ssh_port "$1")" \
+    -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+    -o LogLevel=ERROR -o ConnectTimeout=5
+}
+
+fetch_base() {
+  mkdir -p "$CACHE"
+  [ -f "$BASE" ] && return
+  if [ ! -f "$IMAGE" ]; then
+    log "downloading the Ubuntu 24.04 cloud image (once)"
+    curl -fL --progress-bar -o "$IMAGE.part" "$IMAGE_URL"
+    mv "$IMAGE.part" "$IMAGE"
+  fi
+  # The published vmdk is stream-optimised and carries a zero UUID, which VirtualBox
+  # records on first use and then refuses to clone again. A VDI copy has a real one.
+  VBoxManage clonemedium disk "$IMAGE" "$BASE" --format VDI >/dev/null
+  VBoxManage closemedium disk "$IMAGE" >/dev/null 2>&1 || true
+  VBoxManage closemedium disk "$BASE" >/dev/null 2>&1 || true
+}
+
+make_seed_iso() {
+  # A NoCloud seed: an ISO9660 volume labelled `cidata`. Whichever builder exists wins;
+  # pycdlib in a private venv is the fallback because it needs no root and no package.
+  local dir="$1" out="$2"
+  if command -v cloud-localds >/dev/null; then
+    cloud-localds "$out" "$dir/user-data" "$dir/meta-data"
+  elif command -v xorriso >/dev/null; then
+    xorriso -as mkisofs -quiet -V cidata -J -r -o "$out" "$dir/user-data" "$dir/meta-data"
+  elif command -v genisoimage >/dev/null; then
+    genisoimage -quiet -V cidata -J -r -o "$out" "$dir/user-data" "$dir/meta-data"
+  else
+    local venv="$CACHE/venv"
+    [ -x "$venv/bin/python" ] || { python3 -m venv "$venv" && "$venv/bin/pip" -q --disable-pip-version-check install pycdlib; }
+    "$venv/bin/python" - "$dir" "$out" <<'PY'
+import sys, pycdlib
+d, out = sys.argv[1], sys.argv[2]
+iso = pycdlib.PyCdlib()
+iso.new(interchange_level=3, joliet=3, rock_ridge='1.09', vol_ident='cidata')
+for n in ('user-data', 'meta-data'):
+    iso.add_file(f'{d}/{n}', f'/{n.upper().replace("-", "")}.;1',
+                 rr_name=n, joliet_path=f'/{n}')
+iso.write(out); iso.close()
+PY
+  fi
+}
+
+write_cloud_init() {
+  local dir="$1" name="$2"
+  # A key of its own, so the harness never depends on what the developer's agent holds.
+  [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N '' -C hive-vm -f "$KEY"
+  # The customer gets sudo and nothing else. No Java, no Docker, no Clojure:
+  # installing those is the installer's job, and the point is to watch it do it.
+  cat >"$dir/user-data" <<EOF
+#cloud-config
+hostname: $name
+users:
+  - name: customer
+    shell: /bin/bash
+    groups: [sudo]
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    ssh_authorized_keys:
+      - $(cat "$KEY.pub")
+package_update: false
+EOF
+  printf 'instance-id: %s-%s\nlocal-hostname: %s\n' "$name" "$(date +%s)" "$name" >"$dir/meta-data"
+}
+
+cmd_up() {
+  local short="${1:-customer}" name dir port
+  name="$(vm_name "$short")"; dir="$(vm_dir "$short")"
+  if exists "$short"; then
+    running "$short" || VBoxManage startvm "$name" --type headless >/dev/null
+  else
+    fetch_base
+    # A directory with no VM is a create that died halfway; its disk is still
+    # registered with VirtualBox, and a second clone onto it would fail.
+    if [ -f "$dir/disk.vdi" ]; then
+      VBoxManage closemedium disk "$dir/disk.vdi" --delete >/dev/null 2>&1 || rm -f "$dir/disk.vdi"
+    fi
+    mkdir -p "$dir"
+    log "creating $name ($CPUS cpu, ${MEM}MB, ${DISK}MB disk)"
+    VBoxManage clonemedium disk "$BASE" "$dir/disk.vdi" --format VDI >/dev/null
+    VBoxManage closemedium disk "$BASE" >/dev/null 2>&1 || true
+    VBoxManage modifymedium disk "$dir/disk.vdi" --resize "$DISK" >/dev/null
+    write_cloud_init "$dir" "$name"
+    make_seed_iso "$dir" "$dir/seed.iso"
+    port="$(free_port)"
+    VBoxManage createvm --name "$name" --ostype Ubuntu_64 --basefolder "$CACHE/vms" --register >/dev/null
+    VBoxManage modifyvm "$name" --cpus "$CPUS" --memory "$MEM" --nic1 nat \
+      --natpf1 "ssh,tcp,,$port,,22" --uart1 0x3F8 4 --uartmode1 file "$dir/console.log" \
+      --audio-enabled off --graphicscontroller vmsvga >/dev/null
+    VBoxManage storagectl "$name" --name SATA --add sata --portcount 2 >/dev/null
+    VBoxManage storageattach "$name" --storagectl SATA --port 0 --type hdd --medium "$dir/disk.vdi"
+    VBoxManage storageattach "$name" --storagectl SATA --port 1 --type dvddrive --medium "$dir/seed.iso"
+    VBoxManage startvm "$name" --type headless >/dev/null
+  fi
+  log "waiting for ssh on port $(ssh_port "$short")"
+  local i
+  for i in $(seq 1 90); do
+    # shellcheck disable=SC2046
+    if ssh $(ssh_opts "$short") customer@127.0.0.1 'cloud-init status --wait >/dev/null 2>&1; true' 2>/dev/null; then
+      log "$name is up: test/vm/hive-vm ssh $short"
+      return
+    fi
+    sleep 5
+  done
+  die "$name did not answer ssh in 7.5 minutes; see $(vm_dir "$short")/console.log"
+}
+
+cmd_ssh() {
+  local short="${1:-customer}"; shift || true
+  exists "$short" || die "no VM $(vm_name "$short"); run: test/vm/hive-vm up $short"
+  # shellcheck disable=SC2046
+  exec ssh $(ssh_opts "$short") $([ $# -eq 0 ] && echo -t) customer@127.0.0.1 "$@"
+}
+
+cmd_run() {
+  # run NAME SCRIPT: a local script executed by the guest's login bash, output streamed back.
+  local short="$1" script="${2:?run NAME SCRIPT}"
+  exists "$short" || die "no VM $(vm_name "$short"); run: test/vm/hive-vm up $short"
+  # shellcheck disable=SC2046
+  ssh $(ssh_opts "$short") customer@127.0.0.1 'bash -ls' <"$script"
+}
+
+cmd_push() {
+  # push NAME LOCAL REMOTE: copy a file in, e.g. a freshly built binary over the released one.
+  local short="$1" src="${2:?push NAME LOCAL REMOTE}" dst="${3:?push NAME LOCAL REMOTE}"
+  exists "$short" || die "no VM $(vm_name "$short")"
+  scp -q -i "$KEY" -P "$(ssh_port "$short")" -o StrictHostKeyChecking=no \
+    -o UserKnownHostsFile=/dev/null -o LogLevel=ERROR "$src" "customer@127.0.0.1:$dst"
+}
+
+cmd_snap() {
+  # Offline on purpose: a live snapshot writes guest RAM through VirtualBox's saved-state
+  # path, measured at ~1GB per 13 minutes on an 8GB guest. Shutdown + snapshot + boot
+  # takes under a minute and the disk is all a retry needs.
+  local short="$1" tag="${2:?snap NAME TAG}" name i
+  name="$(vm_name "$short")"
+  if running "$short"; then
+    VBoxManage controlvm "$name" acpipowerbutton >/dev/null
+    for i in $(seq 1 60); do running "$short" || break; sleep 2; done
+    running "$short" && VBoxManage controlvm "$name" poweroff >/dev/null
+  fi
+  VBoxManage snapshot "$name" take "$tag" >/dev/null
+  log "snapshot $tag"
+  cmd_up "$short"
+}
+
+cmd_back() {
+  local short="$1" tag="${2:?back NAME TAG}"
+  running "$short" && VBoxManage controlvm "$(vm_name "$short")" poweroff >/dev/null 2>&1 && sleep 2
+  VBoxManage snapshot "$(vm_name "$short")" restore "$tag" >/dev/null
+  cmd_up "$short"
+}
+
+cmd_list() { VBoxManage list vms | grep "\"$PREFIX" || true; }
+
+cmd_destroy() {
+  # Deletes a whole machine, so it is named for what it does and wants the flag.
+  local short="${1:?destroy NAME --i-mean-it}"
+  [ "${2:-}" = "--i-mean-it" ] || die "destroy deletes $(vm_name "$short") and its disk; pass --i-mean-it"
+  exists "$short" || die "no VM $(vm_name "$short")"
+  running "$short" && VBoxManage controlvm "$(vm_name "$short")" poweroff >/dev/null 2>&1 && sleep 2
+  VBoxManage unregistervm "$(vm_name "$short")" --delete
+  rm -rf "$(vm_dir "$short")"
+  log "destroyed $(vm_name "$short")"
+}
+
+case "${1:-}" in
+  up)      shift; cmd_up "$@" ;;
+  ssh)     shift; cmd_ssh "$@" ;;
+  run)     shift; cmd_run "$@" ;;
+  push)    shift; cmd_push "$@" ;;
+  snap)    shift; cmd_snap "$@" ;;
+  back)    shift; cmd_back "$@" ;;
+  list)    cmd_list ;;
+  destroy) shift; cmd_destroy "$@" ;;
+  *) sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
