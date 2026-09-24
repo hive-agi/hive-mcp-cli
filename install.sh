@@ -53,9 +53,9 @@ REPO="hive-agi/hive-mcp-cli"
 # Ed25519 public key that signs SHA256SUMS, as base64 of its SPKI DER.
 # Published at https://hive-mcp.com/hive-signing-key.pub so you can compare this
 # pinned copy against a different origin before trusting it.
-# EMPTY until the key ceremony has run: see bin/gen-signing-key. While it is
-# empty, tier 2 reports itself unavailable rather than passing.
-HIVE_SIGNING_KEY=""
+# Minted 2026-09-24 by bin/gen-signing-key. Rotating means changing this line and
+# the HIVE_SIGNING_KEY secret in the same release; release.yml refuses a mismatch.
+HIVE_SIGNING_KEY="MCowBQYDK2VwAyEAAyxrIUVjH4mLEZ4eYUhu5yPTWKZ+LigQYMZZbQmaRmU="
 
 # RFC 8032 section 7.1 TEST 2. A published vector, so anyone can confirm that
 # what the probe proves is "this openssl verifies Ed25519 correctly".
