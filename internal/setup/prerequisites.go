@@ -61,22 +61,42 @@ func (s *PrerequisitesStep) installDarwin() error {
 }
 
 func (s *PrerequisitesStep) installLinux() error {
-	// Check if apt is available
-	if _, err := exec.LookPath("apt"); err != nil {
-		return fmt.Errorf("apt not found - this step requires Debian/Ubuntu")
+	// apt-get, not apt: apt warns that its CLI is unstable in scripts.
+	if _, err := exec.LookPath("apt-get"); err != nil {
+		return fmt.Errorf("apt-get not found - this step requires Debian/Ubuntu")
 	}
 
-	// Install basic packages via apt
-	aptPkgs := []string{"git", "openjdk-21-jdk", "docker.io"}
-	cmd := exec.Command("sudo", append([]string{"apt", "install", "-y"}, aptPkgs...)...)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("apt install failed: %w", err)
+	// A fresh cloud image ships with empty package lists, so every install
+	// below reports "has no installation candidate" until they are fetched.
+	if err := sudoRun("apt-get", "update"); err != nil {
+		return fmt.Errorf("apt-get update failed: %w", err)
+	}
+
+	// docker-compose-v2 provides `docker compose`, which the Chroma step runs;
+	// docker.io alone does not carry it on Ubuntu. The headless JDK is enough
+	// for a host with no UI, and skips the GTK stack the full one drags in.
+	aptPkgs := []string{"git", "curl", "rlwrap", "openjdk-21-jdk-headless", "docker.io", "docker-compose-v2"}
+	if err := sudoRun(append([]string{"env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y"}, aptPkgs...)...); err != nil {
+		return fmt.Errorf("apt-get install failed: %w", err)
+	}
+
+	// Without the group, every docker call below needs sudo. The membership
+	// only reaches new logins; dockerCommand bridges this run with sg.
+	if u := os.Getenv("USER"); u != "" && u != "root" {
+		if err := sudoRun("usermod", "-aG", "docker", u); err != nil {
+			return fmt.Errorf("adding %s to the docker group failed: %w", u, err)
+		}
 	}
 
 	// Install Clojure
 	return s.installClojureLinux()
+}
+
+func sudoRun(args ...string) error {
+	cmd := exec.Command("sudo", args...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
 }
 
 func (s *PrerequisitesStep) installClojureLinux() error {

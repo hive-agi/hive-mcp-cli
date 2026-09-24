@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 )
 
@@ -37,13 +38,13 @@ func (s *ChromaStep) Check() (bool, error) {
 
 func (s *ChromaStep) Run() error {
 	// First ensure Docker is running
-	if err := exec.Command("docker", "info").Run(); err != nil {
-		return fmt.Errorf("docker is not running: %w", err)
+	if err := dockerCommand("info").Run(); err != nil {
+		return fmt.Errorf("docker is not running, or this user cannot reach its socket (log out and back in after setup adds you to the docker group): %w", err)
 	}
 
 	// Start Chroma using docker-compose in hive-mcp directory
 	dir := s.hiveMCPDir()
-	cmd := exec.Command("docker", "compose", "up", "-d", "chroma")
+	cmd := dockerCommand("compose", "up", "-d", "chroma")
 	cmd.Dir = dir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -68,9 +69,26 @@ func (s *ChromaStep) Run() error {
 	return fmt.Errorf("Chroma failed to start within 30 seconds")
 }
 
+// dockerCommand runs docker directly when this process can reach the socket,
+// and through `sg docker` when the user is in the group but this login
+// predates it: the state the prerequisites step leaves on a fresh machine.
+func dockerCommand(args ...string) *exec.Cmd {
+	if exec.Command("docker", "info").Run() == nil {
+		return exec.Command("docker", args...)
+	}
+	if _, err := exec.LookPath("sg"); err == nil {
+		quoted := make([]string, len(args))
+		for i, a := range args {
+			quoted[i] = "'" + strings.ReplaceAll(a, "'", `'\''`) + "'"
+		}
+		return exec.Command("sg", "docker", "-c", "docker "+strings.Join(quoted, " "))
+	}
+	return exec.Command("docker", args...)
+}
+
 func (s *ChromaStep) Rollback() error {
 	dir := s.hiveMCPDir()
-	cmd := exec.Command("docker", "compose", "down")
+	cmd := dockerCommand("compose", "down")
 	cmd.Dir = dir
 	return cmd.Run()
 }

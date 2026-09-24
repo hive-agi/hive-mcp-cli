@@ -23,6 +23,8 @@ type prereqSpec struct {
 	versionArg string
 	versionRe  string // regex to extract version
 	minVersion string
+	// optional tools degrade one addon when absent; the host still boots.
+	optional bool
 }
 
 var prereqs = []prereqSpec{
@@ -32,20 +34,21 @@ var prereqs = []prereqSpec{
 		versionArg: "--version",
 		versionRe:  `GNU Emacs (\d+\.\d+)`,
 		minVersion: "28.1",
+		optional:   true,
 	},
 	{
 		name:       "Java",
 		command:    "java",
 		versionArg: "-version",
 		versionRe:  `version "?(\d+)(?:\.(\d+))?`,
-		minVersion: "17",
+		minVersion: "21",
 	},
 	{
 		name:       "Clojure",
 		command:    "clojure",
 		versionArg: "--version",
 		versionRe:  `Clojure CLI version (\d+\.\d+\.\d+)`,
-		minVersion: "1.11.0",
+		minVersion: "1.12.0",
 	},
 	{
 		name:       "Babashka",
@@ -53,6 +56,7 @@ var prereqs = []prereqSpec{
 		versionArg: "--version",
 		versionRe:  `babashka v?(\d+\.\d+\.\d+)`,
 		minVersion: "1.3.0",
+		optional:   true,
 	},
 	{
 		name:       "Docker",
@@ -97,6 +101,10 @@ func checkPrereq(spec prereqSpec) PrereqCheck {
 	path, err := exec.LookPath(spec.command)
 	if err != nil {
 		check.Status = StatusMissing
+		if spec.optional {
+			check.Status = StatusWarning
+			check.Version = "not installed, optional"
+		}
 		return check
 	}
 

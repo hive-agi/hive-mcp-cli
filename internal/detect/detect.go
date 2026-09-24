@@ -187,7 +187,9 @@ func PrintResult(r *DetectionResult, colorize func(Status, string) string) {
 	if r.IsReady() {
 		fmt.Println("\n" + colorize(StatusOK, "✓") + " System is ready for hive-mcp setup")
 	} else {
-		fmt.Println("\n" + colorize(StatusError, "✗") + " Please resolve issues before running setup")
+		// Most failures on a fresh machine are exactly what setup installs, so
+		// sending the user off to fix them by hand first is the wrong advice.
+		fmt.Println("\n" + colorize(StatusWarning, "!") + " Not ready yet. Run 'hive setup': it installs Java, Clojure and Docker, clones hive-mcp and starts its services")
 	}
 }
 

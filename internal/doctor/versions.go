@@ -25,6 +25,8 @@ type versionSpec struct {
 	versionRe  string // regex to extract version
 	minVersion string
 	fixHint    string
+	// optional tools degrade one addon when absent; the host still boots.
+	optional bool
 }
 
 var versionSpecs = []versionSpec{
@@ -34,23 +36,24 @@ var versionSpecs = []versionSpec{
 		versionArg: "--version",
 		versionRe:  `GNU Emacs (\d+\.\d+)`,
 		minVersion: "28.1",
-		fixHint:    "Install Emacs 28.1+ via package manager or build from source",
+		fixHint:    "Optional, for the Emacs vessel: install Emacs 28.1+, then hive setup --emacs",
+		optional:   true,
 	},
 	{
 		name:       "Java",
 		command:    "java",
 		versionArg: "-version",
 		versionRe:  `version "?(\d+)(?:\.(\d+))?`,
-		minVersion: "17",
-		fixHint:    "Install OpenJDK 17+: sudo apt install openjdk-17-jdk",
+		minVersion: "21",
+		fixHint:    "Run hive setup, or: sudo apt-get install openjdk-21-jdk",
 	},
 	{
 		name:       "Clojure",
 		command:    "clojure",
 		versionArg: "--version",
 		versionRe:  `Clojure CLI version (\d+\.\d+\.\d+)`,
-		minVersion: "1.11.0",
-		fixHint:    "Install Clojure: curl -L -O https://github.com/clojure/brew-install/releases/latest/download/posix-install.sh && chmod +x posix-install.sh && sudo ./posix-install.sh",
+		minVersion: "1.12.0",
+		fixHint:    "Run hive setup, or: https://clojure.org/guides/install_clojure",
 	},
 	{
 		name:       "Babashka",
@@ -58,7 +61,8 @@ var versionSpecs = []versionSpec{
 		versionArg: "--version",
 		versionRe:  `babashka v?(\d+\.\d+\.\d+)`,
 		minVersion: "1.3.0",
-		fixHint:    "Install Babashka: bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)",
+		fixHint:    "Optional: bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)",
+		optional:   true,
 	},
 	{
 		name:       "Docker",
@@ -82,7 +86,7 @@ var versionSpecs = []versionSpec{
 		versionArg: "--version",
 		versionRe:  `(\d+\.\d+\.\d+)`,
 		minVersion: "0.1.0",
-		fixHint:    "Install Claude CLI: npm install -g @anthropic-ai/claude-code",
+		fixHint:    "Install Claude Code: curl -fsSL https://claude.ai/install.sh | bash",
 	},
 }
 
@@ -103,6 +107,11 @@ func checkVersion(spec versionSpec) CheckResult {
 
 	// Check if command exists
 	path, err := exec.LookPath(spec.command)
+	if err != nil && spec.optional {
+		result.Status = StatusWarning
+		result.Message = "not installed (optional)"
+		return result
+	}
 	if err != nil {
 		result.Status = StatusError
 		result.Message = "not installed"
