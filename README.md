@@ -203,6 +203,24 @@ test/vm/customer-journey.sh --dev    # a customer's first run on a fresh Ubuntu 
   unrelated project. It prints PASS or FAIL for each stage. `HIVE_MCP_LAUNCHER`
   swaps in a dev launcher, and `test/vm/hive-vm` drives the VM by hand.
 
+### How sign-in is built
+
+`internal/auth` is stratified by the house pattern (CPPB, DDD, SOLID). Each layer
+is its own Go package, so the compiler enforces the layering:
+
+| Package | Stratum | Holds |
+|---|---|---|
+| `auth/domain` | core | value objects: `Realm`, `Tokens`, `DeviceGrant`, `Account`, `ArtifactToken`, `Session` |
+| `auth/policy` | promote (pure) | every decision: method choice, PKCE, poll verdicts, offline fallback, error classes |
+| `auth/port` | protocol | small interfaces: identity provider, callback, browser, credential store, accounts, and so on |
+| `auth/pipeline` | pipeline | the Login, Logout, Status and AccessToken use cases, plus the sign-in **flow registry** |
+| `auth/adapter/*` | boundary | Keycloak HTTP, the loopback listener, the keyring/file **backend registry**, the store API |
+| `internal/hive/wire.go` | composition root | which adapter fills which port |
+
+Adding a sign-in method or a credential backend is a registration, never an edit.
+`internal/auth/strata_test.go` reads every package's imports and fails the build
+when a layer reaches past its stratum.
+
 ## License
 
 MIT

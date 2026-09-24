@@ -21,8 +21,6 @@ import (
 	"sort"
 	"strings"
 	"time"
-
-	"github.com/hive-agi/hive-mcp-cli/internal/auth"
 )
 
 // DefaultBaseURL is the public storefront. HIVE_STORE_URL overrides it, which
@@ -45,19 +43,11 @@ func BaseURL() string {
 // Token is the customer's store token, used as a bearer credential. Absent for
 // anonymous browsing, which the catalog allows.
 //
-// HIVE_STORE_TOKEN wins, for CI and scripts. Otherwise it is the session
-// `hive login` left behind, refreshed when it has expired.
+// Only the environment is read here. The `hive login` session is supplied by
+// the command layer (hive.storeClient), so this package never depends on how
+// sign-in works: the store is a lower stratum than auth.
 func Token() string {
-	if t := strings.TrimSpace(os.Getenv("HIVE_STORE_TOKEN")); t != "" {
-		return t
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	t, err := auth.AccessToken(ctx)
-	if err != nil {
-		return ""
-	}
-	return t
+	return strings.TrimSpace(os.Getenv("HIVE_STORE_TOKEN"))
 }
 
 // ExtensionPoint is one seam an addon opens for providers.

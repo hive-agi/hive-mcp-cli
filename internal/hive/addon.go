@@ -60,7 +60,7 @@ stays sealed.`,
 }
 
 func fetchCatalog() (*store.Catalog, *store.Client, error) {
-	c := store.New()
+	c := storeClient()
 	cat, err := c.Catalog(context.Background())
 	if err != nil {
 		return nil, nil, err
