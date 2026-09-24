@@ -1,6 +1,7 @@
 package setup
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -34,14 +35,27 @@ func (s *MCPStep) hiveMCPDir() string {
 	return DefaultHiveMCPDir()
 }
 
+// Check reads the user-scope registration straight from ~/.claude.json.
+// `claude mcp list` would answer too, but it health-checks every server, which
+// boots the whole host JVM (over a minute) just to learn that it is registered.
 func (s *MCPStep) Check() (bool, error) {
-	cmd := exec.Command("claude", "mcp", "list")
-	output, err := cmd.Output()
+	home, err := os.UserHomeDir()
 	if err != nil {
-		// Claude CLI might not be installed or configured
 		return false, nil
 	}
-	return strings.Contains(string(output), "hive-mcp-foss"), nil
+	raw, err := os.ReadFile(filepath.Join(home, ".claude.json"))
+	if err != nil {
+		return false, nil
+	}
+	var cfg struct {
+		MCPServers map[string]struct {
+			Command string `json:"command"`
+		} `json:"mcpServers"`
+	}
+	if json.Unmarshal(raw, &cfg) != nil {
+		return false, nil
+	}
+	return strings.HasSuffix(cfg.MCPServers[MCPServerName].Command, "hive-mcp-foss"), nil
 }
 
 func (s *MCPStep) Run() error {
@@ -54,8 +68,10 @@ func (s *MCPStep) Run() error {
 		return fmt.Errorf("launcher not found at %s (is the hive-mcp checkout complete?)", launcher)
 	}
 
-	// claude mcp add hive -- <hive-mcp>/bin/hive-mcp-foss
-	cmd := exec.Command("claude", "mcp", "add", MCPServerName, "--", launcher)
+	// User scope: without it `claude mcp add` registers for the directory setup
+	// ran in (usually $HOME), and Claude Code opened in any real project does
+	// not see the server at all.
+	cmd := exec.Command("claude", "mcp", "add", "--scope", "user", MCPServerName, "--", launcher)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
@@ -67,6 +83,6 @@ func (s *MCPStep) Run() error {
 }
 
 func (s *MCPStep) Rollback() error {
-	cmd := exec.Command("claude", "mcp", "remove", MCPServerName)
+	cmd := exec.Command("claude", "mcp", "remove", "--scope", "user", MCPServerName)
 	return cmd.Run()
 }

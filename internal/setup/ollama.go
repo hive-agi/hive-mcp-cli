@@ -30,9 +30,14 @@ func (s *OllamaStep) Check() (bool, error) {
 }
 
 func (s *OllamaStep) Run() error {
-	// Check if ollama command exists
+	// Ollama is optional: without it memory still stores and retrieves by tag
+	// and type, only semantic search is off, and the launcher boots anyway.
+	// Failing setup here stopped every machine without Ollama one step short
+	// of registering with Claude Code.
 	if _, err := exec.LookPath("ollama"); err != nil {
-		return fmt.Errorf("ollama not installed - please install from https://ollama.ai")
+		fmt.Println("    -- Ollama not installed: skipped. Semantic search stays off until you")
+		fmt.Println("       install it (https://ollama.com) and run: ollama pull nomic-embed-text")
+		return nil
 	}
 
 	// Pull the embedding model

@@ -249,6 +249,18 @@ func checkEnvVar(name string, required bool, fixHint string) CheckResult {
 	}
 
 	value := getEnv(name, "")
+	// Setup exports HIVE_MCP_DIR from the shell rc file, which only a NEW shell
+	// reads. Running doctor right after setup is the common case, and the
+	// checkout being where the launcher expects it is what actually matters.
+	if value == "" && name == "HIVE_MCP_DIR" {
+		if home, err := os.UserHomeDir(); err == nil {
+			if info, err := os.Stat(home + "/hive-mcp"); err == nil && info.IsDir() {
+				result.Status = StatusWarning
+				result.Message = "not set in this shell; ~/hive-mcp found (open a new shell)"
+				return result
+			}
+		}
+	}
 	if value != "" {
 		// Mask sensitive values
 		displayVal := value
