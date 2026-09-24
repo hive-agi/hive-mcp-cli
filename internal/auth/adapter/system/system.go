@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/hive-agi/hive-mcp-cli/internal/auth/domain"
@@ -38,7 +39,7 @@ func (Machine) Environment() domain.Environment {
 	return domain.Environment{
 		OverSSH:         os.Getenv("SSH_CONNECTION") != "" || os.Getenv("SSH_TTY") != "",
 		HasDisplay:      os.Getenv("DISPLAY") != "" || os.Getenv("WAYLAND_DISPLAY") != "",
-		BrowserOverride: os.Getenv("BROWSER") != "",
+		BrowserOverride: os.Getenv("BROWSER") != "" && firstOpener() != nil,
 		DesktopOS:       runtime.GOOS == "darwin" || runtime.GOOS == "windows",
 		HasOpener:       opener == nil,
 	}
@@ -49,21 +50,45 @@ func (Machine) Hostname() string { h, _ := os.Hostname(); return h }
 // Browser implements port.Browser. $BROWSER wins, as it does for gh and git.
 type Browser struct{}
 
-func (Browser) Open(url string) error {
-	var cmd *exec.Cmd
-	switch {
-	case os.Getenv("BROWSER") != "":
-		cmd = exec.Command(os.Getenv("BROWSER"), url)
-	case runtime.GOOS == "darwin":
-		cmd = exec.Command("open", url)
-	case runtime.GOOS == "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
-	default:
-		if _, err := exec.LookPath("xdg-open"); err != nil {
-			return errors.New("no xdg-open")
+// openers is what to try, in order: each $BROWSER entry (a colon-separated
+// preference list, as xdg-utils and gh read it), then the platform opener.
+// Pure, so the order is testable without launching anything.
+func openers(browserEnv, goos string) [][]string {
+	var out [][]string
+	for _, b := range strings.Split(browserEnv, ":") {
+		if b = strings.TrimSpace(b); b != "" {
+			out = append(out, []string{b})
 		}
-		cmd = exec.Command("xdg-open", url)
 	}
+	switch goos {
+	case "darwin":
+		out = append(out, []string{"open"})
+	case "windows":
+		out = append(out, []string{"rundll32", "url.dll,FileProtocolHandler"})
+	default:
+		out = append(out, []string{"xdg-open"})
+	}
+	return out
+}
+
+// firstOpener is the first candidate installed here. A $BROWSER naming a
+// browser that is not installed (BROWSER=chromium on a Firefox machine, seen
+// 2026-09-24) falls through to the platform opener instead of failing.
+func firstOpener() []string {
+	for _, c := range openers(os.Getenv("BROWSER"), runtime.GOOS) {
+		if _, err := exec.LookPath(c[0]); err == nil {
+			return c
+		}
+	}
+	return nil
+}
+
+func (Browser) Open(url string) error {
+	c := firstOpener()
+	if c == nil {
+		return errors.New("no browser opener found ($BROWSER, open, xdg-open)")
+	}
+	cmd := exec.Command(c[0], append(c[1:], url)...)
 	if err := cmd.Start(); err != nil {
 		return err
 	}
