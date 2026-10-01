@@ -61,8 +61,8 @@ var versionSpecs = []versionSpec{
 		versionArg: "--version",
 		versionRe:  `babashka v?(\d+\.\d+\.\d+)`,
 		minVersion: "1.3.0",
-		fixHint:    "Optional: bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)",
-		optional:   true,
+		// Required: bb-mcp, the MCP server every client launches, runs on it.
+		fixHint: "Run hive setup, or: bash < <(curl -s https://raw.githubusercontent.com/babashka/babashka/master/install)",
 	},
 	{
 		name:       "Docker",
@@ -232,6 +232,7 @@ func CheckEnvVars() []CheckResult {
 		fixHint  string
 	}{
 		{"HIVE_MCP_DIR", true, "Add to shell config: export HIVE_MCP_DIR=$HOME/hive-mcp"},
+		{"BB_MCP_DIR", false, "Run hive setup (exports the bb-mcp checkout), or: export BB_MCP_DIR=$HOME/bb-mcp"},
 		{"OPENROUTER_API_KEY", false, "Get API key from https://openrouter.ai and add to shell config"},
 	}
 

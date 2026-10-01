@@ -9,10 +9,38 @@ memory, a knowledge graph, kanban and swarm coordination.
 ```bash
 curl -fsSL https://hive-mcp.com/install.sh | sh    # 1. the hive CLI (10 seconds)
 hive setup                                         # 2. everything else (about 5 minutes)
+hive start                                         # 3. boot the backend (about a minute)
 ```
 
-Open a **new terminal**, start `claude` in any project, and hive is there. That is the
-free (FOSS) build, and it needs no account.
+Install with `curl -fsSL https://hive-mcp.com/install.sh | sh` then `hive setup`.
+`hive setup` installs bb-mcp, publishes it at `~/.local/share/hive-mcp/bb-mcp`, and
+registers hive with your MCP clients (Claude Code, Codex) through bb-mcp. Already have
+bb-mcp checked out somewhere? Run `<that checkout>/bb-mcp setup`: wherever bb-mcp lives
+becomes the reference. Verify with `bb-mcp setup --check`.
+
+Open a **new terminal**, start `claude` (or `codex`) in any project, and hive is there.
+That is the free (FOSS) build, and it needs no account.
+
+<details>
+<summary>Registering by hand (any MCP client)</summary>
+
+Point the client at the anchor, never at a checkout or a user-specific path:
+
+```json
+{
+  "mcpServers": {
+    "hive": {
+      "command": "${HOME}/.local/share/hive-mcp/bb-mcp/start-bb-mcp.sh"
+    }
+  }
+}
+```
+
+No args: `start-bb-mcp.sh` takes the project from the client's working directory and
+the nREPL port from `<project>/.nrepl-port`, else 7910. Set `BB_MCP_NREPL_PORT` in
+`env` only for a non-default port. A client config without `${HOME}` expansion gets
+the expanded absolute path of the anchor.
+</details>
 
 **Subscribers** add one more step:
 
@@ -28,18 +56,27 @@ No keys to copy, no XML to paste.
 
 It runs on Linux (apt) and macOS (Homebrew). It asks for `sudo` once, to install packages.
 
-1. **Clones** hive-mcp to `~/hive-mcp` (`HIVE_MCP_DIR` overrides).
-2. **Exports** `HIVE_MCP_DIR` in your shell rc file.
-3. **Installs** what is missing: Java 21, the Clojure CLI, Docker with compose, and Git.
-   On Linux it adds you to the `docker` group. A new terminal picks that up.
+1. **Clones** hive-mcp, the backend, to `~/hive-mcp` (`HIVE_MCP_DIR` overrides).
+2. **Exports** `HIVE_MCP_DIR` and `BB_MCP_DIR` in your shell rc file.
+3. **Installs** what is missing: Java 21, the Clojure CLI, Babashka, Docker with compose,
+   and Git. On Linux it adds you to the `docker` group. A new terminal picks that up.
 4. **Resolves** the host's dependencies: the core plus the FOSS starter pack.
 5. **Starts** Chroma, the vector store, with Docker.
 6. **Pulls** the embedding model if [Ollama](https://ollama.com) is installed, and skips this otherwise.
-7. **Registers** hive with Claude Code for every project:
-   `claude mcp add --scope user hive -- ~/hive-mcp/bin/hive-mcp-foss`.
+7. **Installs bb-mcp and registers hive** with your MCP clients. It reuses the bb-mcp
+   already published at `~/.local/share/hive-mcp/bb-mcp`, or clones
+   [bb-mcp](https://github.com/hive-agi/bb-mcp) to `${BB_MCP_DIR:-~/bb-mcp}`, then runs
+   `<checkout>/bb-mcp setup --client all`. bb-mcp setup owns registration: it
+   publishes the anchor and points Claude Code (user scope) and Codex at
+   `~/.local/share/hive-mcp/bb-mcp/start-bb-mcp.sh`. An old entry that launched
+   `bin/hive-mcp-foss` directly is replaced, and setup tells you so.
 
-Every step checks first, so re-running `hive setup` is always safe. The first time
-Claude Code starts hive, the host needs about a minute to boot.
+Every step checks first, so re-running `hive setup` is always safe.
+
+MCP clients launch bb-mcp, a small Babashka server that talks to the hive-mcp JVM
+over nREPL (7910). bb-mcp never starts that JVM: `hive start` does, in the
+background (log in `~/.local/state/hive-mcp/backend.log`); `hive start --foreground`
+keeps it in the terminal. It needs about a minute to boot.
 
 You need [Claude Code](https://claude.ai/download). These are optional:
 
@@ -122,8 +159,9 @@ hive doctor --fix    # applies the fixes it can
 
 | Symptom | Fix |
 |---|---|
-| `claude mcp list` shows no `hive` | re-run `hive setup` |
-| hive is listed but `✘ Failed to connect` | run `~/hive-mcp/bin/hive-mcp-foss` in a terminal and read the log |
+| `claude mcp list` shows no `hive` | `bb-mcp setup --check`, then `~/.local/share/hive-mcp/bb-mcp/bb-mcp setup` (or re-run `hive setup`) |
+| hive is listed but `✘ Failed to connect` | `bb` missing or the anchor broken: `~/.local/share/hive-mcp/bb-mcp/bb-mcp setup --check` |
+| hive tools fail with `could not connect to 'localhost:7910'` | the backend is down: `hive start`, or `hive start --foreground` to read its log |
 | `permission denied` on the docker socket | open a new terminal; setup added you to the `docker` group |
 | a paid addon will not resolve | run `hive auth status`, then `hive login` again |
 | `hive login` says the server does not recognise this CLI | run `hive store login` and paste a token from the [dashboard](https://store.hive-mcp.com/dashboard) |
@@ -158,7 +196,8 @@ hive guide --install && claude mcp add hive-setup --scope user -- hive-setup-mcp
 
 | Command | Does |
 |---|---|
-| `hive setup [--emacs]` | installs and registers everything; safe to re-run |
+| `hive setup [--emacs]` | installs everything; registers hive through `bb-mcp setup`; safe to re-run |
+| `hive start [--foreground]` | boots the hive-mcp backend that bb-mcp talks to |
 | `hive login [--device \| --with-token]` | signs in; creates this machine's artifact token |
 | `hive logout` | revokes and forgets this machine's credentials |
 | `hive auth status \| token` | shows who is signed in; prints an access token |
@@ -176,6 +215,8 @@ Environment variables:
 | Variable | Sets |
 |---|---|
 | `HIVE_MCP_DIR` | where the host is checked out (`~/hive-mcp`) |
+| `BB_MCP_DIR` | where `hive setup` clones bb-mcp when none is published at the anchor (`~/bb-mcp`) |
+| `HIVE_NREPL_PORT` | the backend's nREPL port for `hive start` and `hive doctor` (7910) |
 | `HIVE_STORE_URL` | the store (`https://store.hive-mcp.com`) |
 | `HIVE_AUTH_ISSUER`, `HIVE_AUTH_CLIENT_ID` | the sign-in realm and client, for a dev realm |
 | `HIVE_CREDENTIAL_STORE` | `keyring` or `file`, to force a backend |
@@ -199,8 +240,8 @@ test/vm/customer-journey.sh --dev    # a customer's first run on a fresh Ubuntu 
   drives the real binary through both sign-in flows, token refresh, re-login and
   logout. A scripted browser fills in the Keycloak pages.
 - `test/vm/customer-journey.sh` needs VirtualBox, but no root. It installs Claude
-  Code, runs `install.sh` and `hive setup`, and checks `claude mcp list` from an
-  unrelated project. It prints PASS or FAIL for each stage. `HIVE_MCP_LAUNCHER`
+  Code, runs `install.sh` and `hive setup` (which registers hive through
+  `bb-mcp setup`), and checks `claude mcp list` from an unrelated project. It prints PASS or FAIL for each stage. `HIVE_MCP_LAUNCHER`
   swaps in a dev launcher, and `test/vm/hive-vm` drives the VM by hand.
 
 ### How sign-in is built

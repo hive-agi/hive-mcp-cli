@@ -8,9 +8,12 @@ import (
 	"strings"
 )
 
-// ShellStep configures shell environment variables
+// ShellStep exports the checkout locations in the user's shell rc files, in
+// one managed block that a re-run rewrites in place.
 type ShellStep struct {
 	HiveMCPDir string
+	// BBMCPDir overrides the bb-mcp checkout; default ResolveBBMCPDir.
+	BBMCPDir string
 }
 
 func (s *ShellStep) Name() string {
@@ -24,12 +27,51 @@ func (s *ShellStep) hiveMCPDir() string {
 	return DefaultHiveMCPDir()
 }
 
-// envVars returns the environment variables to set
-func (s *ShellStep) envVars() map[string]string {
-	hiveMCP := s.hiveMCPDir()
-	return map[string]string{
-		"HIVE_MCP_DIR": hiveMCP,
+func (s *ShellStep) bbMCPDir() string {
+	if s.BBMCPDir != "" {
+		return expandPath(s.BBMCPDir)
 	}
+	return ResolveBBMCPDir(DefaultBBMCPSys())
+}
+
+// envVar is one export line, in a stable order.
+type envVar struct{ Key, Value string }
+
+func (s *ShellStep) envVars() []envVar {
+	return []envVar{
+		{"HIVE_MCP_DIR", s.hiveMCPDir()},
+		{BBMCPDirEnv, s.bbMCPDir()},
+	}
+}
+
+// marker identifies hive-mcp-cli managed section
+const shellMarker = "# hive-mcp-cli managed"
+
+// renderShellBlock is the managed block for vars. Pure.
+func renderShellBlock(vars []envVar) string {
+	lines := []string{"", shellMarker + " - START"}
+	for _, v := range vars {
+		lines = append(lines, exportLine(v))
+	}
+	lines = append(lines, shellMarker+" - END", "")
+	return strings.Join(lines, "\n")
+}
+
+func exportLine(v envVar) string {
+	return fmt.Sprintf("export %s=\"%s\"", v.Key, v.Value)
+}
+
+// shellBlockCurrent: content carries a managed block exporting every var. Pure.
+func shellBlockCurrent(content string, vars []envVar) bool {
+	if !strings.Contains(content, shellMarker+" - START") {
+		return false
+	}
+	for _, v := range vars {
+		if !strings.Contains(content, exportLine(v)) {
+			return false
+		}
+	}
+	return true
 }
 
 // shellConfigFiles returns paths to shell config files that exist
@@ -49,22 +91,13 @@ func shellConfigFiles() []string {
 	return existing
 }
 
-// marker identifies hive-mcp-cli managed section
-const shellMarker = "# hive-mcp-cli managed"
-
+// Check passes when some rc file already exports every variable. A block from
+// an older CLI (HIVE_MCP_DIR only) is not current, so the step rewrites it.
 func (s *ShellStep) Check() (bool, error) {
-	files := shellConfigFiles()
-	if len(files) == 0 {
-		return false, nil
-	}
-
-	// Check if any shell config already has our marker
-	for _, f := range files {
+	vars := s.envVars()
+	for _, f := range shellConfigFiles() {
 		content, err := os.ReadFile(f)
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(content), shellMarker) {
+		if err == nil && shellBlockCurrent(string(content), vars) {
 			return true, nil
 		}
 	}
@@ -76,37 +109,17 @@ func (s *ShellStep) Run() error {
 	if len(files) == 0 {
 		return fmt.Errorf("no shell config found (.bashrc or .zshrc)")
 	}
-
-	// Build the config block
-	vars := s.envVars()
-	var lines []string
-	lines = append(lines, "", shellMarker+" - START")
-	for key, value := range vars {
-		lines = append(lines, fmt.Sprintf("export %s=\"%s\"", key, value))
-	}
-	lines = append(lines, shellMarker+" - END", "")
-	block := strings.Join(lines, "\n")
-
-	// Append to each shell config
+	block := renderShellBlock(s.envVars())
 	for _, f := range files {
-		file, err := os.OpenFile(f, os.O_APPEND|os.O_WRONLY, 0644)
-		if err != nil {
-			return fmt.Errorf("failed to open %s: %w", f, err)
-		}
-		defer file.Close()
-
-		if _, err := file.WriteString(block); err != nil {
-			return fmt.Errorf("failed to write to %s: %w", f, err)
+		if err := replaceMarkedSection(f, block); err != nil {
+			return fmt.Errorf("failed to write %s: %w", f, err)
 		}
 	}
-
 	return nil
 }
 
 func (s *ShellStep) Rollback() error {
-	files := shellConfigFiles()
-
-	for _, f := range files {
+	for _, f := range shellConfigFiles() {
 		if err := removeMarkedSection(f); err != nil {
 			return fmt.Errorf("failed to rollback %s: %w", f, err)
 		}
@@ -114,42 +127,47 @@ func (s *ShellStep) Rollback() error {
 	return nil
 }
 
-// removeMarkedSection removes the hive-mcp-cli managed section from a file
-func removeMarkedSection(path string) error {
-	file, err := os.Open(path)
+// replaceMarkedSection drops any managed block from path and appends block.
+func replaceMarkedSection(path, block string) error {
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		return err
 	}
-	defer file.Close()
+	kept := stripMarkedSection(string(raw))
+	if kept != "" {
+		kept += "\n"
+	}
+	return os.WriteFile(path, []byte(kept+block), 0644)
+}
 
+// removeMarkedSection removes the hive-mcp-cli managed section from a file
+func removeMarkedSection(path string) error {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(stripMarkedSection(string(raw))+"\n"), 0644)
+}
+
+// stripMarkedSection returns content without the managed block and without
+// trailing blank lines. Pure.
+func stripMarkedSection(content string) string {
 	var lines []string
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(strings.NewReader(content))
 	inSection := false
-
 	for scanner.Scan() {
 		line := scanner.Text()
-
-		if strings.Contains(line, shellMarker+" - START") {
+		switch {
+		case strings.Contains(line, shellMarker+" - START"):
 			inSection = true
-			continue
-		}
-		if strings.Contains(line, shellMarker+" - END") {
+		case strings.Contains(line, shellMarker+" - END"):
 			inSection = false
-			continue
-		}
-		if !inSection {
+		case !inSection:
 			lines = append(lines, line)
 		}
 	}
-
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-
-	// Remove trailing empty lines that we added
 	for len(lines) > 0 && lines[len(lines)-1] == "" {
 		lines = lines[:len(lines)-1]
 	}
-
-	return os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0644)
+	return strings.Join(lines, "\n")
 }

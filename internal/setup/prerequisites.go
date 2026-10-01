@@ -17,9 +17,10 @@ func (s *PrerequisitesStep) Name() string {
 
 func (s *PrerequisitesStep) Check() (bool, error) {
 	// Check for key binaries
-	// Emacs, tmux and Babashka are optional: the starter pack degrades the
+	// Babashka is required: bb-mcp, the MCP server every client launches,
+	// runs on it. Emacs and tmux stay optional: the starter pack degrades the
 	// matching addon when its host tool is absent.
-	required := []string{"git", "java", "clojure", "docker"}
+	required := []string{"git", "java", "clojure", "docker", "bb"}
 	for _, bin := range required {
 		if _, err := exec.LookPath(bin); err != nil {
 			return false, nil
@@ -46,7 +47,7 @@ func (s *PrerequisitesStep) installDarwin() error {
 	}
 
 	packages := []string{
-		"git", "openjdk@21", "clojure/tools/clojure", "docker",
+		"git", "openjdk@21", "clojure/tools/clojure", "docker", "borkdude/brew/babashka",
 	}
 
 	for _, pkg := range packages {
@@ -88,8 +89,10 @@ func (s *PrerequisitesStep) installLinux() error {
 		}
 	}
 
-	// Install Clojure
-	return s.installClojureLinux()
+	if err := s.installClojureLinux(); err != nil {
+		return err
+	}
+	return installBabashkaLinux()
 }
 
 func sudoRun(args ...string) error {
@@ -116,6 +119,29 @@ rm linux-install.sh
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	return cmd.Run()
+}
+
+// installBabashkaLinux uses babashka's official installer (no apt package
+// carries a current bb), into /usr/local/bin like the Clojure CLI.
+func installBabashkaLinux() error {
+	if _, err := exec.LookPath("bb"); err == nil {
+		return nil
+	}
+	script := `
+set -e
+tmp="$(mktemp -d)"
+curl -fsSL https://raw.githubusercontent.com/babashka/babashka/master/install -o "$tmp/install"
+chmod +x "$tmp/install"
+sudo "$tmp/install"
+rm -rf "$tmp"
+`
+	cmd := exec.Command("bash", "-c", script)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("babashka install failed: %w", err)
+	}
+	return nil
 }
 
 func (s *PrerequisitesStep) Rollback() error {

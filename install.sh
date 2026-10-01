@@ -361,6 +361,14 @@ main() {
     warn "Claude Code not found on PATH. Install it from https://claude.ai/download"
   fi
 
+  # Babashka is required: bb-mcp, the MCP server every client launches, runs
+  # on it. Installing it needs sudo, so it is hive setup's job, not this script's.
+  if have bb; then
+    ok "babashka found (bb-mcp runs on it)"
+  else
+    warn "babashka (bb) not found; it is required, and hive setup installs it"
+  fi
+
   case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
     *) warn "$BIN_DIR is not on your PATH. Add it to your shell rc file." ;;
@@ -380,12 +388,17 @@ main() {
 
   say ""
   if [ "$RUN_SETUP" -eq 1 ]; then
-    say "${B}Done.${R} Open a new terminal and start ${B}claude${R} in any project."
+    say "${B}Done.${R} Run ${B}hive start${R}, open a new terminal and start ${B}claude${R} in any project."
   else
     say "${B}Done.${R} Next:"
     say ""
-    say "  ${B}hive setup${R}     installs the rest and registers hive with Claude Code (~5 min)"
+    say "  ${B}hive setup${R}     installs the rest, installs bb-mcp, publishes it at"
+    say "                 ~/.local/share/hive-mcp/bb-mcp and registers hive with your"
+    say "                 MCP clients (Claude Code, Codex) through bb-mcp (~5 min)"
+    say "  ${B}hive start${R}     boots the hive-mcp backend bb-mcp talks to"
   fi
+  say "  Already have bb-mcp checked out? ${B}<that checkout>/bb-mcp setup${R} makes it the reference;"
+  say "  verify with ${B}bb-mcp setup --check${R}."
   say "  ${B}hive login${R}     subscribers: sign in in the browser; paid addons then resolve"
   say ""
   say "${DIM}Or let Claude do it: start ${R}claude${DIM} and say \"set up hive for me\".${R}"

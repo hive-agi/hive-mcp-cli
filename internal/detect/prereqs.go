@@ -56,7 +56,7 @@ var prereqs = []prereqSpec{
 		versionArg: "--version",
 		versionRe:  `babashka v?(\d+\.\d+\.\d+)`,
 		minVersion: "1.3.0",
-		optional:   true,
+		// required: bb-mcp, the MCP server every client launches, runs on it.
 	},
 	{
 		name:       "Docker",
