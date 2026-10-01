@@ -138,6 +138,23 @@ overlay. It is gitignored, and the launcher merges it over the starter pack at e
 boot. If you already wrote that file yourself, the command leaves it alone and prints
 the lines to add. After adding, restart Claude Code, or run `/mcp` and reconnect hive.
 
+## Updating
+
+Your MCP clients launch bb-mcp through the anchor `~/.local/share/hive-mcp/bb-mcp`,
+so an update is a fast-forward of the checkout it points at. bb-mcp prints one line
+on stderr when a newer release exists; then:
+
+```bash
+hive update --dry-run   # the plan: which checkout, which commands
+hive update             # git fetch + fast-forward bb-mcp, then bb-mcp setup --check
+hive update --all       # also the hive-mcp checkout ($HIVE_MCP_DIR, ~/hive-mcp)
+```
+
+It never stashes, rebases or switches branch for you. A checkout with local changes
+to tracked files, a detached HEAD, or no tracked branch is left alone, with the
+command that gets it unstuck. Restart your MCP clients afterwards (and `hive start`
+the backend again after `--all`).
+
 ## Let Claude do it
 
 The installer also teaches Claude Code the whole procedure. It installs two skills and
@@ -198,6 +215,7 @@ hive guide --install && claude mcp add hive-setup --scope user -- hive-setup-mcp
 |---|---|
 | `hive setup [--emacs]` | installs everything; registers hive through `bb-mcp setup`; safe to re-run |
 | `hive start [--foreground]` | boots the hive-mcp backend that bb-mcp talks to |
+| `hive update [--all] [--dry-run]` | fast-forwards bb-mcp (and hive-mcp) to its tracked branch; runs `bb-mcp setup --check` |
 | `hive login [--device \| --with-token]` | signs in; creates this machine's artifact token |
 | `hive logout` | revokes and forgets this machine's credentials |
 | `hive auth status \| token` | shows who is signed in; prints an access token |

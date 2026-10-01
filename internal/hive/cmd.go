@@ -97,7 +97,8 @@ var Cmd = &bonzai.Cmd{
 
 Commands:
   setup   - Install and configure hive-mcp components
-  start   - Start the hive-mcp backend (the JVM bb-mcp talks to)
+  update  - Fast-forward bb-mcp (--all: hive-mcp too) to the latest release
+  start  - Start the hive-mcp backend (the JVM bb-mcp talks to)
   login  - Sign in to your hive account (opens the browser)
   logout  - Sign out and revoke this machine's tokens
   auth    - Who is signed in; print the session token
@@ -111,10 +112,11 @@ Commands:
 Getting started:
   hive setup                 # the FOSS stack; bb-mcp registers hive with your MCP clients
   hive start                 # boot the backend
-  hive login                # subscribers: sign in; paid addons now resolve
+  hive update                # later: pull the latest bb-mcp release (--all: hive-mcp too)
+  hive login               # subscribers: sign in; paid addons now resolve
   hive addon add hive-carto  # load one into the host, then restart Claude Code`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, startCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, updateCmd, startCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {
