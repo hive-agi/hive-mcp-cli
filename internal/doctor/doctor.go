@@ -205,7 +205,6 @@ func printCheck(check CheckResult) {
 	}
 
 	fmt.Printf("  %s %s", symbol, check.Name)
-	fmt.Printf("  %s %s", symbol, check.Name)
 
 	if check.Message != "" {
 		fmt.Printf(": %s", check.Message)

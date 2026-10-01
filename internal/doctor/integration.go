@@ -1,19 +1,13 @@
 package doctor
 
 import (
-	"encoding/json"
 	"fmt"
-	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
-	"time"
-)
 
-const (
-	mcpServerName = "hive"
-	nreplAddr     = "127.0.0.1:7910"
+	"github.com/hive-agi/hive-mcp-cli/internal/setup"
 )
 
 func hiveMCPDir() string {
@@ -25,83 +19,88 @@ func hiveMCPDir() string {
 }
 
 func launcherPath() string {
-	return filepath.Join(hiveMCPDir(), "bin", "hive-mcp-foss")
+	return setup.LauncherPath(hiveMCPDir())
 }
 
-// CheckMCP verifies MCP server registration with Claude Code
+// CheckMCP verifies the MCP client registration. bb-mcp owns registration,
+// so the verdict is `<ANCHOR>/bb-mcp setup --check`, and the fix is
+// `bb-mcp setup` (through the setup step, which clones bb-mcp first when the
+// anchor does not resolve).
 func CheckMCP() []CheckResult {
+	sys := setup.DefaultBBMCPSys()
+	o := setup.ObserveBBMCP(sys)
+
+	var out string
+	var runErr error
+	if o.AnchorCheckout != "" {
+		argv := setup.BBMCPSetupArgv(o.Anchor, "--check")
+		b, err := exec.Command(argv[0], argv[1:]...).CombinedOutput()
+		out, runErr = string(b), err
+	}
 	return []CheckResult{
-		checkMCPRegistration(),
-		checkMCPServerListed(),
+		bbmcpCheckResult(o, out, runErr, fixWithBBMCPSetup),
+		legacyCheckResult(o.Legacy),
 	}
 }
 
-func checkMCPRegistration() CheckResult {
-	result := CheckResult{
-		Name:    "MCP Server Registration",
-		FixHint: fmt.Sprintf("Register with: claude mcp add %s -- %s", mcpServerName, launcherPath()),
-		CanFix:  true,
-		Fix:     registerMCPServer,
-	}
-
-	cmd := exec.Command("claude", "mcp", "list")
-	out, err := cmd.CombinedOutput()
-	if err != nil {
-		result.Status = StatusError
-		result.Message = "failed to query MCP servers"
-		result.Details = err.Error()
-		return result
-	}
-
-	output := string(out)
-	if strings.Contains(output, "hive-mcp-foss") {
-		result.Status = StatusOK
-		result.Message = mcpServerName + " server registered (bin/hive-mcp-foss)"
-	} else {
-		result.Status = StatusError
-		result.Message = mcpServerName + " server not registered"
-		result.Details = fmt.Sprintf("Run 'claude mcp add %s -- %s' to register", mcpServerName, launcherPath())
-	}
-
-	return result
+func fixWithBBMCPSetup() error {
+	return (&setup.BBMCPStep{}).Run()
 }
 
-func checkMCPServerListed() CheckResult {
-	result := CheckResult{
-		Name:    "MCP Server Config",
-		FixHint: "Check ~/.claude.json for the MCP server entry",
+// bbmcpCheckResult turns the observed anchor and the `--check` outcome into a
+// verdict. Pure, apart from carrying fix.
+func bbmcpCheckResult(o setup.BBMCPObserved, out string, runErr error, fix func() error) CheckResult {
+	r := CheckResult{
+		Name:   "MCP registration (bb-mcp setup --check)",
+		CanFix: true,
+		Fix:    fix,
 	}
-
-	cmd := exec.Command("claude", "mcp", "list", "--json")
-	out, err := cmd.Output()
-	if err != nil {
-		result.Status = StatusWarning
-		result.Message = "could not verify server config"
-		return result
+	switch {
+	case o.AnchorCheckout == "":
+		r.Status = StatusError
+		r.Message = "bb-mcp is not published at " + o.Anchor
+		r.FixHint = "hive setup, or <your bb-mcp checkout>/bb-mcp setup"
+	case runErr != nil:
+		r.Status = StatusError
+		r.Message = "bb-mcp setup --check failed"
+		r.Details = lastLines(out, 12)
+		r.FixHint = filepath.Join(o.Anchor, "bb-mcp") + " setup"
+	default:
+		r.Status = StatusOK
+		r.Message = "hive -> " + filepath.Join(o.Anchor, "start-bb-mcp.sh") + " (bb-mcp at " + o.AnchorCheckout + ")"
 	}
-
-	var servers interface{}
-	if err := json.Unmarshal(out, &servers); err != nil {
-		result.Status = StatusWarning
-		result.Message = "could not parse server list"
-		return result
-	}
-
-	result.Status = StatusOK
-	result.Message = "server config accessible"
-	return result
+	return r
 }
 
-func registerMCPServer() error {
-	launcher := launcherPath()
-	if _, err := os.Stat(launcher); err != nil {
-		return fmt.Errorf("launcher not found at %s", launcher)
+// legacyCheckResult flags registrations of the old direct launcher. The user
+// entry is replaced by `bb-mcp setup`; a local one shadows it in its project.
+func legacyCheckResult(entries []setup.LegacyEntry) CheckResult {
+	r := CheckResult{Name: "Legacy hive-mcp-foss registrations"}
+	if len(entries) == 0 {
+		r.Status = StatusOK
+		r.Message = "none"
+		return r
 	}
-	cmd := exec.Command("claude", "mcp", "add", mcpServerName, "--", launcher)
-	return cmd.Run()
+	var lines []string
+	for _, e := range entries {
+		lines = append(lines, setup.LegacyRemedy(e))
+	}
+	r.Status = StatusWarning
+	r.Message = fmt.Sprintf("%d entry(ies) still launch bin/hive-mcp-foss directly", len(entries))
+	r.Details = strings.Join(lines, "\n    ")
+	r.FixHint = "bb-mcp setup replaces the user entry; run the commands above for project-local ones"
+	return r
 }
 
-// CheckIntegration performs end-to-end checks against a running host
+func lastLines(s string, n int) string {
+	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
+	if len(lines) > n {
+		lines = lines[len(lines)-n:]
+	}
+	return strings.Join(lines, "\n    ")
+}
+
+// CheckIntegration checks the backend bb-mcp talks to: the hive-mcp JVM.
 func CheckIntegration() []CheckResult {
 	return []CheckResult{
 		checkLauncher(),
@@ -111,7 +110,7 @@ func CheckIntegration() []CheckResult {
 
 func checkLauncher() CheckResult {
 	result := CheckResult{
-		Name:    "FOSS launcher",
+		Name:    "hive-mcp launcher (backend)",
 		FixHint: "Re-run 'hive setup' or 'git -C $HIVE_MCP_DIR pull' to restore bin/hive-mcp-foss",
 	}
 
@@ -134,24 +133,21 @@ func checkLauncher() CheckResult {
 	return result
 }
 
-// checkNreplReachable probes the host's nREPL port, the same readiness
-// signal the launcher and the container healthcheck use.
+// checkNreplReachable probes the backend's nREPL port, which every bb-mcp
+// tool call goes through.
 func checkNreplReachable() CheckResult {
+	addr := setup.BackendNreplAddr(os.Getenv)
 	result := CheckResult{
 		Name:    "hive-mcp nREPL",
-		FixHint: "Start the host with bin/hive-mcp-foss (or open Claude Code, which starts it on demand)",
+		FixHint: "hive start (runs bin/hive-mcp-foss in the background)",
 	}
-
-	conn, err := net.DialTimeout("tcp", nreplAddr, 2*time.Second)
-	if err != nil {
+	if !setup.NreplListening(addr) {
 		result.Status = StatusWarning
-		result.Message = "not listening on " + nreplAddr
-		result.Details = "the host is only up while an MCP client holds it open"
+		result.Message = "not listening on " + addr
+		result.Details = "bb-mcp is a client; its tools fail until the backend runs"
 		return result
 	}
-	conn.Close()
-
 	result.Status = StatusOK
-	result.Message = "listening on " + nreplAddr
+	result.Message = "listening on " + addr
 	return result
 }

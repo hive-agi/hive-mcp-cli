@@ -97,7 +97,8 @@ var Cmd = &bonzai.Cmd{
 
 Commands:
   setup   - Install and configure hive-mcp components
-  login   - Sign in to your hive account (opens the browser)
+  start   - Start the hive-mcp backend (the JVM bb-mcp talks to)
+  login  - Sign in to your hive account (opens the browser)
   logout  - Sign out and revoke this machine's tokens
   auth    - Who is signed in; print the session token
   addon   - Browse the store, load an addon into the host, scaffold your own
@@ -108,11 +109,12 @@ Commands:
   help    - Display help information
 
 Getting started:
-  hive setup                 # the FOSS stack, registered with Claude Code
-  hive login                 # subscribers: sign in; paid addons now resolve
+  hive setup                 # the FOSS stack; bb-mcp registers hive with your MCP clients
+  hive start                 # boot the backend
+  hive login                # subscribers: sign in; paid addons now resolve
   hive addon add hive-carto  # load one into the host, then restart Claude Code`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, startCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {
@@ -128,16 +130,16 @@ var detectCmd = &bonzai.Cmd{
 
 	// MCP metadata for AI tool discovery
 	Mcp: &bonzai.McpMeta{
-		Desc: "Detect installed hive-mcp components, prerequisites, and environment configuration. Scans for Java, Clojure, Docker, Git, Claude CLI, the optional Emacs/tmux/Babashka hosts, and checks environment variables.",
+		Desc: "Detect installed hive-mcp components, prerequisites, and environment configuration. Scans for Java, Clojure, Babashka, Docker, Git, Claude CLI, the optional Emacs/tmux hosts, and checks environment variables.",
 	},
 
 	Long: `Detect scans your system for:
   - Platform (Linux/macOS) and package manager
   - Shell configuration files
-  - Required tools: Java 21, Clojure CLI, Docker, Git, Claude CLI
-  - Optional hosts the starter pack degrades without: Emacs, tmux, Babashka
+  - Required tools: Java 21, Clojure CLI, Babashka (runs bb-mcp), Docker, Git, Claude CLI
+  - Optional hosts the starter pack degrades without: Emacs, tmux
   - Running services: Emacs daemon, Chroma, Ollama
-  - Environment variables: HIVE_MCP_DIR, OPENROUTER_API_KEY`,
+  - Environment variables: HIVE_MCP_DIR, BB_MCP_DIR, OPENROUTER_API_KEY`,
 
 	Do: func(x *bonzai.Cmd, args ...string) error {
 		fmt.Println("Detecting system configuration...")
@@ -175,20 +177,29 @@ var setupCmd = &bonzai.Cmd{
 
 	// MCP metadata for AI tool discovery
 	Mcp: &bonzai.McpMeta{
-		Desc: "Install and configure the batteries-included hive-mcp stack: clone the repo, install prerequisites, resolve the core + starter-pack classpath, start Chroma, configure Ollama, and register bin/hive-mcp-foss with Claude Code. Pass --emacs to also sync Doom and start the Emacs daemon.",
+		Desc: "Install and configure the batteries-included hive-mcp stack: clone the repo, install prerequisites (including Babashka), resolve the core + starter-pack classpath, start Chroma, configure Ollama, then install bb-mcp, publish it at ~/.local/share/hive-mcp/bb-mcp and run 'bb-mcp setup --client all' to register hive with Claude Code and Codex. Pass --emacs to also sync Doom and start the Emacs daemon.",
 		Params: []bonzai.McpParam{
 			{Name: "emacs", Desc: "Also sync Doom Emacs packages and start the Emacs daemon", Type: "boolean"},
 		},
 	},
 
 	Long: `Setup performs the following steps:
-  1. Clone hive-mcp
-  2. Configure shell environment (HIVE_MCP_DIR)
-  3. Install prerequisites (platform-specific)
+  1. Clone hive-mcp (the backend JVM, nREPL on 7910)
+  2. Configure shell environment (HIVE_MCP_DIR, BB_MCP_DIR)
+  3. Install prerequisites (platform-specific; Babashka is required)
   4. Download Clojure dependencies: core plus starter.deps.edn
   5. Setup Docker volumes and Chroma
   6. Configure Ollama with embedding model
-  7. Register bin/hive-mcp-foss with Claude Code as the "hive" MCP server
+  7. Install bb-mcp and register hive with your MCP clients:
+     reuse the checkout published at ~/.local/share/hive-mcp/bb-mcp, else
+     clone https://github.com/hive-agi/bb-mcp to ${BB_MCP_DIR:-~/bb-mcp},
+     then run '<checkout>/bb-mcp setup --client all' (Claude Code, Codex)
+
+Registration lives only in bb-mcp setup. Already have bb-mcp checked out
+somewhere? Run <that checkout>/bb-mcp setup: wherever bb-mcp lives becomes
+the reference. Verify with bb-mcp setup --check.
+
+Setup does not boot the backend; 'hive start' does.
 
 With --emacs, two more steps run before registration: sync Emacs packages
 and start the Emacs daemon. Without it the Emacs vessel simply stays
@@ -220,7 +231,7 @@ dormant until a daemon appears; lings run in tmux.`,
 		if withEmacs {
 			steps = append(steps, &setup.DoomSyncStep{}, &setup.EmacsDaemonStep{})
 		}
-		steps = append(steps, &setup.MCPStep{})
+		steps = append(steps, &setup.BBMCPStep{})
 
 		// Create runner with progress output
 		runner := setup.NewRunner(steps)
@@ -238,8 +249,9 @@ dormant until a daemon appears; lings run in tmux.`,
 		fmt.Println("Setup complete!")
 		fmt.Println()
 		fmt.Println("Next:")
-		fmt.Println("  1. Open a NEW terminal (it picks up HIVE_MCP_DIR and the docker group)")
-		fmt.Println("  2. Run claude in any project. The first start boots hive, about a minute.")
+		fmt.Println("  1. Open a NEW terminal (it picks up HIVE_MCP_DIR, BB_MCP_DIR and the docker group)")
+		fmt.Println("  2. hive start   boots the hive-mcp backend (about a minute)")
+		fmt.Println("  3. Run claude (or codex) in any project; it launches hive through bb-mcp.")
 		fmt.Println()
 		fmt.Println("Subscribers: hive login, then hive addon add <id> for each paid addon.")
 		fmt.Println("Something off? hive doctor")
@@ -267,8 +279,10 @@ var doctorCmd = &bonzai.Cmd{
   - Version verification (minimum requirements)
   - Service health (Chroma, Ollama endpoints)
   - Environment variable validation
-  - MCP registration status (the "hive" server pointing at bin/hive-mcp-foss)
-  - Launcher present and executable, nREPL reachable on 7910
+  - MCP registration: <ANCHOR>/bb-mcp setup --check, where ANCHOR is
+    ~/.local/share/hive-mcp/bb-mcp (fix: bb-mcp setup)
+  - Legacy entries that still launch bin/hive-mcp-foss directly
+  - Backend launcher present and executable, nREPL reachable on 7910
   - Optional observability stack check
 
 Use --fix to attempt automatic fixes for fixable issues.`,
