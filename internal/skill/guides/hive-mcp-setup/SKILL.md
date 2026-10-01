@@ -35,9 +35,23 @@ is `hive setup`, `hive login`, `hive addon add <id>`, then a restart of Claude C
 
 ```bash
 hive detect     # what is already here
-hive setup      # clone, prerequisites, vector store, register with Claude Code
+hive setup      # clone, prerequisites, vector store, bb-mcp, register with MCP clients
+hive start      # boot the backend JVM bb-mcp talks to (about a minute)
 hive doctor     # every check
 ```
+
+Install with `curl -fsSL https://hive-mcp.com/install.sh | sh` then `hive setup`.
+`hive setup` installs bb-mcp, publishes it at `~/.local/share/hive-mcp/bb-mcp`, and
+registers hive with your MCP clients (Claude Code, Codex) through bb-mcp. Already have
+bb-mcp checked out somewhere? Run `<that checkout>/bb-mcp setup`: wherever bb-mcp lives
+becomes the reference. Verify with `bb-mcp setup --check`.
+
+Two processes, and it matters which is which when diagnosing:
+
+- **bb-mcp**, the MCP server every client launches through the anchor
+  `~/.local/share/hive-mcp/bb-mcp/start-bb-mcp.sh`. Small, Babashka, starts instantly.
+- **the hive-mcp JVM** (`~/hive-mcp/bin/hive-mcp-foss`, nREPL on 7910), the backend
+  bb-mcp forwards every tool call to. bb-mcp never starts it; `hive start` does.
 
 `hive setup` is idempotent: a step whose check already passes is skipped, and a
 failing step rolls back what it did. Re-running it is always safe, so prefer it over
@@ -79,6 +93,7 @@ a stop: do not retry it and do not work around it. A tier reported
 |---|---|---|
 | Java | 21 | the host is a JVM process; CI and the image both run 21 |
 | Clojure CLI | 1.12+ | the host runs from source |
+| Babashka (`bb`) | 1.3+ | bb-mcp, the MCP server the clients launch, runs on it |
 | Docker | recent | Chroma (vectors) and the clojure-lsp sidecar |
 | Git | 2+ | clones the host and any git-sourced addon |
 | Claude Code | latest | the MCP client |
@@ -91,13 +106,13 @@ libtmux for the headless vessel; Emacs 28.1+ for the Emacs vessel.
 
 ### Doing it by hand
 
-When the CLI is unavailable, the same four steps:
+When the CLI is unavailable, the same steps:
 
 ```bash
 git clone https://github.com/hive-agi/hive-mcp.git ~/hive-mcp
-cd ~/hive-mcp
-bin/hive-mcp-foss                       # starts services, merges the starter pack, boots on nREPL
-claude mcp add hive -- "$HOME/hive-mcp/bin/hive-mcp-foss"
+git clone https://github.com/hive-agi/bb-mcp ~/bb-mcp
+~/bb-mcp/bb-mcp setup --client all      # publishes the anchor, registers hive (Claude Code, Codex)
+~/hive-mcp/bin/hive-mcp-foss            # the backend: services, starter pack, nREPL on 7910
 ```
 
 `bin/hive-mcp-foss` merges [`starter.deps.edn`](https://github.com/hive-agi/hive-mcp/blob/main/starter.deps.edn)
@@ -259,22 +274,48 @@ to wait out.
 
 ---
 
-## Part 3: register with Claude Code
+## Part 3: register with your MCP clients
+
+Registration lives only in `bb-mcp setup`; `hive setup` runs it for you:
 
 ```bash
-claude mcp add hive -- "$HOME/hive-mcp/bin/hive-mcp-foss"
+~/.local/share/hive-mcp/bb-mcp/bb-mcp setup              # Claude Code (user scope) and Codex
+~/.local/share/hive-mcp/bb-mcp/bb-mcp setup --dry-run    # print the plan, write nothing
 ```
 
-`hive setup` does this for you. Use `--scope user` to make it available in every
-project rather than the current one.
+Already have bb-mcp checked out somewhere? Run `<that checkout>/bb-mcp setup`:
+wherever bb-mcp lives becomes the reference, re-published at the anchor.
+
+**Never** register `bin/hive-mcp-foss` directly any more, and never write
+`HIVE_MCP_DIR` into a client config. An old direct entry is replaced by `bb-mcp
+setup`; a project-local one (`claude mcp add` without `--scope user`) shadows the
+user entry in that project, and `hive doctor` prints the
+`claude mcp remove --scope local hive` to run there.
+
+Any other MCP client, by hand:
+
+```json
+{
+  "mcpServers": {
+    "hive": {
+      "command": "${HOME}/.local/share/hive-mcp/bb-mcp/start-bb-mcp.sh"
+    }
+  }
+}
+```
+
+No args. In a config without `${HOME}` expansion, use the expanded absolute path of
+the anchor, never of the real checkout. `env` only for a non-default port:
+`BB_MCP_NREPL_PORT`.
 
 ---
 
 ## Part 4: prove it
 
 ```bash
-hive doctor                      # versions, services, env, registration, nREPL on 7910
-claude mcp list | grep hive      # hive: …/bin/hive-mcp-foss
+hive doctor                      # versions, services, env, bb-mcp setup --check, nREPL on 7910
+bb-mcp setup --check             # anchor, every client's hive entry, bb, nREPL
+claude mcp list | grep hive      # hive: …/.local/share/hive-mcp/bb-mcp/start-bb-mcp.sh
 ```
 
 `hive doctor --fix` attempts repairs for the fixable checks.
@@ -302,8 +343,9 @@ Work outward from the process:
 
 | Symptom | Look at |
 |---|---|
-| `claude mcp list` has no `hive` | registration; re-run `hive setup`, or `claude mcp add` by hand |
-| registered but tools missing | the host did not boot: run `bin/hive-mcp-foss` in a terminal and read the log |
+| `claude mcp list` has no `hive` | registration: `bb-mcp setup --check`, then `bb-mcp setup` (or re-run `hive setup`) |
+| `hive` fails to connect | bb-mcp itself: `bb` missing, or the anchor dangling; `bb-mcp setup --check` names it |
+| tools fail with `could not connect to 'localhost:7910'` | the backend is down: `hive start`, or `hive start --foreground` to read the log |
 | host boots, one addon absent | its host tool is missing; the log names the reason; `hive addon status` confirms |
 | memory works, semantic search does not | Ollama or the embedding model: `ollama pull nomic-embed-text` |
 | licensed addon will not resolve | the three causes above, in that order |
