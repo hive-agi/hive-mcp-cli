@@ -51,7 +51,9 @@ printf 'setup binary' > "$WORK/release/hive-setup-mcp-linux-amd64"
   cd "$WORK/release"
   sha256sum hive-linux-amd64 hive-setup-mcp-linux-amd64 > SHA256SUMS
 )
-TMP="$WORK/download" BIN_DIR="$WORK/bin" MODE=none COUNT=0
+# The published digest belongs to an attested release artifact (COUNT=1),
+# while the substituted download and rewritten SHA256SUMS agree with each other.
+TMP="$WORK/download" BIN_DIR="$WORK/bin" MODE=none COUNT=1
 sha256_of() { sha256sum "$1" | cut -d' ' -f1; }
 fetch() { cp "$WORK/release/$(basename "$1")" "$2"; }
 verify_signature() { TIER_SIG='unavailable: test fixture'; }
