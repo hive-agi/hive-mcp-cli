@@ -21,6 +21,7 @@ gh() {
     *:attestation:--help) return 0 ;;
     *:api:repos/$REPO/releases/tags/v$VERSION) printf '%s\n' "$release_digest" ;;
     api-error:api:*) return 1 ;;
+    invalid:api:repos/$REPO/attestations/$release_digest) printf 'invalid\n' ;;
     *:api:repos/$REPO/attestations/$release_digest) printf '%s\n' "$COUNT" ;;
     bad:attestation:verify) return 1 ;;
     good:attestation:verify) return 0 ;;
@@ -42,6 +43,9 @@ verify_provenance
 MODE=api-error COUNT=1
 if verify_provenance; then printf 'API failure passed\n' >&2; exit 1; fi
 [ "$TIER_PROV" = 'FAILED: cannot query published attestations' ]
+MODE=invalid
+if verify_provenance; then printf 'malformed attestation response passed\n' >&2; exit 1; fi
+[ "$TIER_PROV" = 'FAILED: invalid attestation API response' ]
 # A substituted binary's digest must not be used to declare attestation absent.
 # Exercise download, checksums, provenance and the installation boundary together.
 mkdir -p "$WORK/release" "$WORK/bin" "$WORK/download"
@@ -64,4 +68,4 @@ if ! grep -q 'FAILED: binary differs from published release asset digest' "$WORK
   cat "$WORK/output" >&2; exit 1
 fi
 [ ! -e "$BIN_DIR/hive" ] && [ ! -e "$BIN_DIR/hive-setup-mcp" ]
-printf '6 provenance verdicts passed (including substituted binary installation refusal)\n'
+printf '7 provenance verdicts passed (including substituted binary installation refusal)\n'

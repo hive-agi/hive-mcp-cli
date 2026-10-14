@@ -257,7 +257,7 @@ verify_provenance() {
     || { TIER_PROV="FAILED: binary differs from published release asset digest"; return 1; }
   # No attestation for the expected artifact is a publishing gap, not a failed
   # cryptographic check. API errors must not be mistaken for an empty list.
-  attestations="$(gh api "repos/$REPO/attestations/$expected" --jq '.attestations | length' 2>/dev/null)" \
+  attestations="$(gh api "repos/$REPO/attestations/$expected" --jq 'if (.attestations | type) == "array" then (.attestations | length) else "invalid" end' 2>/dev/null)" \
     || { TIER_PROV="FAILED: cannot query published attestations"; return 1; }
   case "$attestations" in
     0) TIER_PROV="unavailable: no attestation published for this release yet"; return 0 ;;
