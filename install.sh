@@ -237,12 +237,26 @@ verify_provenance() {
     TIER_PROV="unavailable: gh not installed"
     return 0
   fi
+  if ! gh attestation --help >/dev/null 2>&1; then
+    TIER_PROV="unavailable: gh too old (needs >= 2.49 for attestation)"
+    return 0
+  fi
+  # No attestation is a publishing gap, not a failed cryptographic check.
+  # Query by the actual binary digest before verifying: any API error must
+  # NOT be mistaken for an empty list of attestations.
+  digest="$(sha256_of "$TMP/hive")" || { TIER_PROV="FAILED: cannot hash binary for provenance"; return 1; }
+  attestations="$(gh api "repos/$REPO/attestations/sha256:$digest" --jq '.attestations | length' 2>/dev/null)" \
+    || { TIER_PROV="FAILED: cannot query published attestations"; return 1; }
+  case "$attestations" in
+    0) TIER_PROV="unavailable: no attestation published for this release yet"; return 0 ;;
+    ''|*[!0-9]*) TIER_PROV="FAILED: invalid attestation API response"; return 1 ;;
+  esac
   if gh attestation verify "$TMP/hive" --repo "$REPO" >/dev/null 2>&1; then
     TIER_PROV="verified: built by $REPO's release workflow"
-  else
-    TIER_PROV="unavailable: no attestation published for this release yet"
+    return 0
   fi
-  return 0
+  TIER_PROV="FAILED: published attestation did not verify for this binary"
+  return 1
 }
 
 download_and_verify() {
@@ -270,7 +284,7 @@ download_and_verify() {
   done
   TIER_SUM="verified: sha256 of every file matched SHA256SUMS"
 
-  verify_provenance
+  verify_provenance || die "$TIER_PROV. Nothing was installed. Do not retry: report this."
 }
 
 install_verified() {
