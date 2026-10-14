@@ -241,11 +241,23 @@ verify_provenance() {
     TIER_PROV="unavailable: gh too old (needs >= 2.49 for attestation)"
     return 0
   fi
-  # No attestation is a publishing gap, not a failed cryptographic check.
-  # Query by the actual binary digest before verifying: any API error must
-  # NOT be mistaken for an empty list of attestations.
+  # Look up the release asset's published digest independently of the downloaded
+  # binary AND SHA256SUMS. A stolen signing key can rewrite SHA256SUMS; querying
+  # attestations by the candidate digest would then misreport a substitution as
+  # "no attestation published". Do not treat missing metadata as absence.
+  expected="$(gh api "repos/$REPO/releases/tags/v$VERSION" \
+    --jq ".assets[] | select(.name == \"hive-$OS-$ARCH\") | .digest" 2>/dev/null)" \
+    || { TIER_PROV="FAILED: cannot query release asset digest"; return 1; }
+  case "$expected" in
+    sha256:????????????????????????????????????????????????????????????????) ;;
+    *) TIER_PROV="FAILED: release asset has no published SHA256 digest"; return 1 ;;
+  esac
   digest="$(sha256_of "$TMP/hive")" || { TIER_PROV="FAILED: cannot hash binary for provenance"; return 1; }
-  attestations="$(gh api "repos/$REPO/attestations/sha256:$digest" --jq '.attestations | length' 2>/dev/null)" \
+  [ "sha256:$digest" = "$expected" ] \
+    || { TIER_PROV="FAILED: binary differs from published release asset digest"; return 1; }
+  # No attestation for the expected artifact is a publishing gap, not a failed
+  # cryptographic check. API errors must not be mistaken for an empty list.
+  attestations="$(gh api "repos/$REPO/attestations/$expected" --jq '.attestations | length' 2>/dev/null)" \
     || { TIER_PROV="FAILED: cannot query published attestations"; return 1; }
   case "$attestations" in
     0) TIER_PROV="unavailable: no attestation published for this release yet"; return 0 ;;

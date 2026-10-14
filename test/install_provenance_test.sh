@@ -11,13 +11,17 @@ TMP="$WORK"
 printf 'binary bytes' > "$TMP/hive"
 REPO='hive-agi/hive-mcp-cli'
 have() { [ "$1" = gh ]; }
-sha256_of() { printf 'abc123\n'; }
+fixture_digest='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+sha256_of() { printf '%s\n' "$fixture_digest"; }
+VERSION=0.3.2 OS=linux ARCH=amd64
+release_digest="sha256:$fixture_digest"
 gh() {
   case "$MODE:$1:$2" in
     old:attestation:--help) return 1 ;;
-    none:attestation:--help|bad:attestation:--help|good:attestation:--help|api-error:attestation:--help) return 0 ;;
-    none:api:*|bad:api:*|good:api:*) printf '%s\n' "$COUNT" ;;
+    *:attestation:--help) return 0 ;;
+    *:api:repos/$REPO/releases/tags/v$VERSION) printf '%s\n' "$release_digest" ;;
     api-error:api:*) return 1 ;;
+    *:api:repos/$REPO/attestations/$release_digest) printf '%s\n' "$COUNT" ;;
     bad:attestation:verify) return 1 ;;
     good:attestation:verify) return 0 ;;
     *) printf 'unexpected gh call: %s\n' "$*" >&2; return 1 ;;
@@ -38,4 +42,24 @@ verify_provenance
 MODE=api-error COUNT=1
 if verify_provenance; then printf 'API failure passed\n' >&2; exit 1; fi
 [ "$TIER_PROV" = 'FAILED: cannot query published attestations' ]
-printf '5 provenance verdicts passed\n'
+# A substituted binary's digest must not be used to declare attestation absent.
+# Exercise download, checksums, provenance and the installation boundary together.
+mkdir -p "$WORK/release" "$WORK/bin" "$WORK/download"
+printf 'substituted binary' > "$WORK/release/hive-linux-amd64"
+printf 'setup binary' > "$WORK/release/hive-setup-mcp-linux-amd64"
+(
+  cd "$WORK/release"
+  sha256sum hive-linux-amd64 hive-setup-mcp-linux-amd64 > SHA256SUMS
+)
+TMP="$WORK/download" BIN_DIR="$WORK/bin" MODE=none COUNT=0
+sha256_of() { sha256sum "$1" | cut -d' ' -f1; }
+fetch() { cp "$WORK/release/$(basename "$1")" "$2"; }
+verify_signature() { TIER_SIG='unavailable: test fixture'; }
+if (download_and_verify && install_verified) > "$WORK/output" 2>&1; then
+  printf 'substituted binary installed\n' >&2; exit 1
+fi
+if ! grep -q 'FAILED: binary differs from published release asset digest' "$WORK/output"; then
+  cat "$WORK/output" >&2; exit 1
+fi
+[ ! -e "$BIN_DIR/hive" ] && [ ! -e "$BIN_DIR/hive-setup-mcp" ]
+printf '6 provenance verdicts passed (including substituted binary installation refusal)\n'
