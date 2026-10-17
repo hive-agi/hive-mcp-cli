@@ -237,12 +237,45 @@ verify_provenance() {
     TIER_PROV="unavailable: gh not installed"
     return 0
   fi
+  if ! gh attestation --help >/dev/null 2>&1; then
+    TIER_PROV="unavailable: gh too old (needs >= 2.49 for attestation)"
+    return 0
+  fi
+  # Every query below goes through the GitHub API, which gh refuses without a
+  # login. A gh that is installed but not logged in cannot check this tier at
+  # all; say so instead of reporting the refused query as a failed check.
+  if ! gh auth status >/dev/null 2>&1; then
+    TIER_PROV="unavailable: gh not logged in (run gh auth login to check provenance)"
+    return 0
+  fi
+  # Look up the release asset's published digest independently of the downloaded
+  # binary AND SHA256SUMS. A stolen signing key can rewrite SHA256SUMS; querying
+  # attestations by the candidate digest would then misreport a substitution as
+  # "no attestation published". Do not treat missing metadata as absence.
+  expected="$(gh api "repos/$REPO/releases/tags/v$VERSION" \
+    --jq ".assets[] | select(.name == \"hive-$OS-$ARCH\") | .digest" 2>/dev/null)" \
+    || { TIER_PROV="FAILED: cannot query release asset digest"; return 1; }
+  case "$expected" in
+    sha256:????????????????????????????????????????????????????????????????) ;;
+    *) TIER_PROV="FAILED: release asset has no published SHA256 digest"; return 1 ;;
+  esac
+  digest="$(sha256_of "$TMP/hive")" || { TIER_PROV="FAILED: cannot hash binary for provenance"; return 1; }
+  [ "sha256:$digest" = "$expected" ] \
+    || { TIER_PROV="FAILED: binary differs from published release asset digest"; return 1; }
+  # No attestation for the expected artifact is a publishing gap, not a failed
+  # cryptographic check. API errors must not be mistaken for an empty list.
+  attestations="$(gh api "repos/$REPO/attestations/$expected" --jq 'if (.attestations | type) == "array" then (.attestations | length) else "invalid" end' 2>/dev/null)" \
+    || { TIER_PROV="FAILED: cannot query published attestations"; return 1; }
+  case "$attestations" in
+    0) TIER_PROV="unavailable: no attestation published for this release yet"; return 0 ;;
+    ''|*[!0-9]*) TIER_PROV="FAILED: invalid attestation API response"; return 1 ;;
+  esac
   if gh attestation verify "$TMP/hive" --repo "$REPO" >/dev/null 2>&1; then
     TIER_PROV="verified: built by $REPO's release workflow"
-  else
-    TIER_PROV="unavailable: no attestation published for this release yet"
+    return 0
   fi
-  return 0
+  TIER_PROV="FAILED: published attestation did not verify for this binary"
+  return 1
 }
 
 download_and_verify() {
@@ -270,7 +303,7 @@ download_and_verify() {
   done
   TIER_SUM="verified: sha256 of every file matched SHA256SUMS"
 
-  verify_provenance
+  verify_provenance || die "$TIER_PROV. Nothing was installed. Do not retry: report this."
 }
 
 install_verified() {
