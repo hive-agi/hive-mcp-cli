@@ -241,6 +241,13 @@ verify_provenance() {
     TIER_PROV="unavailable: gh too old (needs >= 2.49 for attestation)"
     return 0
   fi
+  # Every query below goes through the GitHub API, which gh refuses without a
+  # login. A gh that is installed but not logged in cannot check this tier at
+  # all; say so instead of reporting the refused query as a failed check.
+  if ! gh auth status >/dev/null 2>&1; then
+    TIER_PROV="unavailable: gh not logged in (run gh auth login to check provenance)"
+    return 0
+  fi
   # Look up the release asset's published digest independently of the downloaded
   # binary AND SHA256SUMS. A stolen signing key can rewrite SHA256SUMS; querying
   # attestations by the candidate digest would then misreport a substitution as

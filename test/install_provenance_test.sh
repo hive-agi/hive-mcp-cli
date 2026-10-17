@@ -19,6 +19,8 @@ gh() {
   case "$MODE:$1:$2" in
     old:attestation:--help) return 1 ;;
     *:attestation:--help) return 0 ;;
+    anon:auth:status) return 1 ;;
+    *:auth:status) return 0 ;;
     *:api:repos/$REPO/releases/tags/v$VERSION) printf '%s\n' "$release_digest" ;;
     api-error:api:*) return 1 ;;
     invalid:api:repos/$REPO/attestations/$release_digest) printf 'invalid\n' ;;
@@ -31,6 +33,9 @@ gh() {
 MODE=old
 verify_provenance
 [ "$TIER_PROV" = 'unavailable: gh too old (needs >= 2.49 for attestation)' ]
+MODE=anon
+verify_provenance
+[ "$TIER_PROV" = 'unavailable: gh not logged in (run gh auth login to check provenance)' ]
 MODE=none COUNT=0
 verify_provenance
 [ "$TIER_PROV" = 'unavailable: no attestation published for this release yet' ]
@@ -68,4 +73,4 @@ if ! grep -q 'FAILED: binary differs from published release asset digest' "$WORK
   cat "$WORK/output" >&2; exit 1
 fi
 [ ! -e "$BIN_DIR/hive" ] && [ ! -e "$BIN_DIR/hive-setup-mcp" ]
-printf '7 provenance verdicts passed (including substituted binary installation refusal)\n'
+printf '8 provenance verdicts passed (including substituted binary installation refusal)\n'
