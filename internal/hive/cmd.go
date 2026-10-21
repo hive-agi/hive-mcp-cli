@@ -103,6 +103,7 @@ Commands:
   logout  - Sign out and revoke this machine's tokens
   auth    - Who is signed in; print the session token
   addon   - Browse the store, load an addon into the host, scaffold your own
+  cloak   - Sealing: hive cloak status | unlock | reveal id=X reason=... | help
   doctor  - Diagnose and fix common issues
   detect  - Detect system prerequisites and installed components
   guide   - Install the setup skills Claude Code reads
@@ -116,7 +117,7 @@ Getting started:
   hive login               # subscribers: sign in; paid addons now resolve
   hive addon add hive-carto  # load one into the host, then restart Claude Code`,
 
-	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, updateCmd, startCmd, loginCmd, logoutCmd, authCmd, addonCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
+	Cmds: []*bonzai.Cmd{helpCmd, setupCmd, updateCmd, startCmd, loginCmd, logoutCmd, authCmd, addonCmd, cloakCmd, doctorCmd, detectCmd, guideCmd, storeCmd},
 
 	// Show help when called without arguments
 	Do: func(x *bonzai.Cmd, args ...string) error {
