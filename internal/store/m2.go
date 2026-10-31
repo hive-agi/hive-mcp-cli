@@ -215,7 +215,7 @@ type ProbeResult int
 
 const (
 	ProbeAccepted     ProbeResult = iota // the gateway served the probe artifact
-	ProbeNotEntitled                     // authenticated, but the probe artifact is not in the plan
+	ProbeNotEntitled                     // authenticated, but the probe artifact is not in the plan (or the plan lapsed)
 	ProbeRejected                        // the gateway does not know this token
 	ProbeInconclusive                    // anything else: network, 5xx, a probe that moved
 )
@@ -227,26 +227,50 @@ const probePath = "/io/github/hive-agi/hive-carto/maven-metadata.xml"
 // ProbeToken asks the gateway whether it accepts token, the way Maven will:
 // Basic auth, token in both positions.
 func ProbeToken(ctx context.Context, token string) (ProbeResult, string) {
+	d := DiagnoseToken(ctx, token)
+	return d.Result, d.Status
+}
+
+// Diagnosis is a probe's outcome with the gateway's own reason, when it gave
+// one, and the sentence that reason means to a customer.
+type Diagnosis struct {
+	Result      ProbeResult
+	Status      string // the HTTP status line, or the transport error
+	Code        int    // the HTTP status code; 0 when no response arrived
+	Reason      string // the gateway's deny reason (deny/token-revoked, ...), or ""
+	Explanation string // what to do about it; "" when the token was accepted
+}
+
+// DiagnoseToken probes the gateway like ProbeToken and keeps the refusal
+// reason a Maven client throws away.
+func DiagnoseToken(ctx context.Context, token string) Diagnosis {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, MavenURL()+probePath, nil)
 	if err != nil {
-		return ProbeInconclusive, err.Error()
+		return Diagnosis{Result: ProbeInconclusive, Status: err.Error()}
 	}
 	req.SetBasicAuth(token, token)
 	resp, err := (&http.Client{Timeout: 15 * time.Second}).Do(req)
 	if err != nil {
-		return ProbeInconclusive, err.Error()
+		return Diagnosis{Result: ProbeInconclusive, Status: err.Error()}
 	}
 	defer resp.Body.Close()
+	d := Diagnosis{Status: resp.Status, Code: resp.StatusCode}
+	if resp.StatusCode != http.StatusOK {
+		d.Reason = RefusalReason(resp.Header)
+		d.Explanation = ExplainRefusal(d.Reason, resp.StatusCode)
+	}
 	switch {
 	case resp.StatusCode == http.StatusOK:
-		return ProbeAccepted, resp.Status
+		d.Result = ProbeAccepted
 	case resp.StatusCode == http.StatusUnauthorized:
-		return ProbeRejected, resp.Status
-	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound:
-		return ProbeNotEntitled, resp.Status
+		d.Result = ProbeRejected
+	case resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound ||
+		resp.StatusCode == http.StatusPaymentRequired:
+		d.Result = ProbeNotEntitled
 	default:
-		return ProbeInconclusive, resp.Status
+		d.Result = ProbeInconclusive
 	}
+	return d
 }
 
 // Redact keeps a token recognisable in output without printing it.

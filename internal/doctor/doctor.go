@@ -136,6 +136,12 @@ func RunAll() (*DoctorResult, error) {
 		Checks: CheckIntegration(),
 	})
 
+	// Store credential: the reason a Maven client will not give
+	result.Categories = append(result.Categories, Category{
+		Name:   "Store Credential",
+		Checks: CheckStore(),
+	})
+
 	// Optional: Observability stack
 	result.Categories = append(result.Categories, Category{
 		Name:   "Observability (Optional)",
