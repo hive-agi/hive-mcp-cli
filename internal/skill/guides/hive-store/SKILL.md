@@ -67,6 +67,30 @@ Without the CLI (CI, another build tool): mint a token in
 <https://store.hive-mcp.com/dashboard> (shown **once**), and
 <https://store.hive-mcp.com/setup> renders the exact `deps.edn` and `settings.xml`.
 
+### The setup recipe, by hand
+
+This is the whole recipe; `hive store login` writes exactly this.
+
+In the project's `deps.edn` (not `~/.clojure/deps.edn`):
+
+```clojure
+{:mvn/repos {"hive-store" {:url "https://store.hive-mcp.com/maven"}}}
+```
+
+In `~/.m2/settings.xml`, mode 0600, the token in **both** fields:
+
+```xml
+<settings><servers><server>
+  <id>hive-store</id>
+  <username>hv_live_...</username>
+  <password>hv_live_...</password>
+</server></servers></settings>
+```
+
+The URL **must** be `https://`. Both aether and tools.deps refuse a plain `http://`
+repository, so there is no "try it without TLS first" step; a dev store needs a
+certificate too.
+
 ## The two credentials
 
 `hive login` handles both. They still differ, and it matters when diagnosing:
@@ -96,6 +120,12 @@ In the order worth checking:
    `hive-store` elsewhere wins silently.
 4. **Plain `http://`.** Both aether and tools.deps reject it outright.
 5. **The addon is preview, not available.** `hive addon show <id>` says which.
+
+6. **The token was revoked, expired, or the subscription lapsed.** Maven shows only
+   the status (401, 402, 403). The gateway names the reason in the
+   `x-hive-store-reason` header and in `WWW-Authenticate`; `hive store login --check`
+   and `hive doctor` (Store Credential) read it and print the sentence, e.g. "this
+   token was revoked; mint a new one ...". Run one of those before guessing.
 
 Proof, in one command:
 

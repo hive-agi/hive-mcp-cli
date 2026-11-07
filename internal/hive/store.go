@@ -97,15 +97,17 @@ func login(token string) error {
 	}
 
 	fmt.Printf("Checking the token against %s ...\n", store.MavenURL())
-	result, status := store.ProbeToken(context.Background(), token)
+	d := store.DiagnoseToken(context.Background(), token)
+	result, status := d.Result, d.Status
 	switch result {
 	case store.ProbeRejected:
 		return fmt.Errorf("the gateway rejected this token (%s). Nothing was written.\n"+
-			"Mint a new one at %s/dashboard; a revoked token stops working immediately", status, store.BaseURL())
+			"%s", status, d.Explanation)
 	case store.ProbeAccepted:
 		fmt.Println(color.GreenString("  ok"), "token accepted")
 	case store.ProbeNotEntitled:
 		fmt.Println(color.YellowString("  --"), "token accepted, but the probe artifact is outside your plan ("+status+"); writing it anyway")
+		fmt.Println("     " + d.Explanation)
 	default:
 		fmt.Println(color.YellowString("  --"), "could not reach the gateway ("+status+"); writing the token unverified")
 	}
@@ -145,8 +147,12 @@ func reportWiring() error {
 		fmt.Printf("  %s token in both <username> and <password>\n", mark(w.UserEqualsPass))
 	}
 	if w.Token != "" {
-		result, status := store.ProbeToken(context.Background(), w.Token)
+		d := store.DiagnoseToken(context.Background(), w.Token)
+		result, status := d.Result, d.Status
 		fmt.Printf("  %s gateway accepts %s (%s)\n", mark(result == store.ProbeAccepted || result == store.ProbeNotEntitled), store.Redact(w.Token), status)
+		if d.Explanation != "" {
+			fmt.Printf("    %s\n", d.Explanation)
+		}
 	}
 	_ = reportShadow(w)
 	if !w.ServerFound {
